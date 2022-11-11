@@ -1,0 +1,90 @@
+assembly_name	*organism
+Os-Nipponbare-Reference-IRGSP-1.0	Oryza sativa
+Si-Yugu1-Reference-JGI-2.0	Setaria italica
+At-Col-0-Rerefence-TAIR-10.1	Arabidopsis thaliana
+Ms-DH1-Reference-JGI-7.0	Miscanthus sinensis
+Ss-AP85-441-Reference-1.0	Saccharum spontaneum
+Sb-BTx623-Reference-3.0	Sorghum bicolor
+Zx-PI566673-REFERENCE-YAN-1.0	Zea mays ssp. mexicana
+Zv-TIL11-Draft-Panzea-1.0	Zea mays ssp. parviglumis
+Vc-A1077-Draft-McKain-3.0	Vossia cuspidata
+Zd-Lulu-Draft-Panzea-0.5	Zea diploperennis
+Cn-A1012-Draft-PanAnd-0.1	Chrysopogon nigritanus
+Cs-A1013-Draft-PanAnd-0.1	Chrysopogon serrulatus
+Hd-A1025-Draft-PanAnd-0.1	Hyparrhenia diplandra
+Me-A1031-Draft-PanAnd-0.1	Miscanthus ecklonii
+Mj-A1033-Draft-PanAnd-0.1	Miscanthus junceus
+Cs-A1013-Draft-PanAnd-0.2	Chrysopogon serrulatus
+Et-A1021-Draft-PanAnd-0.1	Elionorus tripsacoides
+Me-A1031-Draft-PanAnd-0.2	Miscanthus ecklonii
+Mj-A1033-Draft-PanAnd-0.2	Miscanthus junceus
+Ud-A1076-Draft-PanAnd-0.1	Urelytrum digitatum
+Pp-Kellogg1297-CleanReads-0.1	Poa pratensis ssp. angustifolia
+Pp-Kellogg1297-Draft-PanAnd-0.3	Poa pratensis ssp. angustifolia
+Pp-Kellogg1297-Draft-PanAnd-1.0	Poa pratensis ssp. angustifolia
+Pp-Kellogg1297-Draft-PanAnd-1.1	Poa pratensis ssp. angustifolia
+Pp-Kellogg1297-CleanReads-0.2	Poa pratensis ssp. angustifolia
+Pp-Kellogg1297-CleanReads-0.1	Poa pratensis ssp. angustifolia
+Hd-A1025-Draft-PanAnd-1.0	Hyparrhenia diplandra
+Cs-A1013-Draft-PanAnd-1.0	Chrysopogon serrulatus
+Cn-A1012-Draft-PanAnd-1.0	Chrysopogon nigritanus
+Cs-A1013-Draft-PanAnd-2.0	Chrysopogon serrulatus
+Cs-A1013-Draft-PanAnd-1.1	Chrysopogon serrulatus
+Cs-A1013-Draft-PanAnd-0.2	Chrysopogon serrulatus
+Cr-AUB069-Draft-PanAnd-0.2	Cymbopogon refractus
+Cr-AUB069-Draft-PanAnd-2.0	Cymbopogon refractus
+Bl-K1279B-Draft-PanAnd-0.2	Bothriochloa laguroides
+Bl-K1279B-Draft-PanAnd-2.0	Bothriochloa laguroides
+Zv-TIL11-Reference-PanAnd-2.0_UnplacedScaffolds	Zea mays ssp. parviglumis
+Zv-TIL11-Reference-PanAnd-2.0	Zea mays ssp. parviglumis
+Vc-Pasquet1098-Draft-PanAnd-2.0	Vossia cuspidata
+Sn-CAM1369-Draft-PanAnd-2.0	Sorghastrum nutans
+Sn-CAM1369-Draft-PanAnd-0.3	Sorghastrum nutans
+Hc-AUB53-1-Draft-PanAnd-2.0	Heteropogon contortus
+Av-Kellogg1287-8-Draft-PanAnd-2.0	Andropogon virginicus
+Zl-RIL003-Draft-PanAnd-0.1	Zea luxurians
+Zl-RIL003-Draft-PanAnd-1.0	Zea luxurians
+Zl-RIL003-Draft-PanAnd-2.0	Zea luxurians
+Zl-RIL003-Reference-PanAnd-2.0	Zea luxurians
+Zd-Gigi-Draft-PanAnd-1.0	Zea diploperennis
+Zd-Gigi-Draft-PanAnd-2.0	Zea diploperennis
+Zd-Gigi-Draft-PanAnd-0.1	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-2.0	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-2.1	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-1.1	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-1.0	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-2.1	Zea diploperennis
+Zd-Gigi-Draft-PanAnd-0.2	Zea diploperennis
+Zd-Gigi-Reference-PanAnd-1.1	Zea diploperennis
+Zx-TIL25-Draft-PanAnd-1.0	Zea mays ssp. mexicana
+Zx-TIL25-Reference-PanAnd-1.0	Zea mays ssp. mexicana
+Zx-TIL25-Draft-PanAnd-0.1	Zea mays ssp. mexicana
+Ud-A1076-Draft-PanAnd-0.2	Urelytrum digitatum
+Cc-PI314907-Draft-PanAnd-2.0	Cymbopogon citratus
+Ac-Pasquet1232-Draft-PanAnd-2.0	Andropogon chinensis
+Ac-Pasquet1232-Draft-PanAnd-2.0	Andropogon chinensis
+Cc-PI314907-Draft-PanAnd-2.0	Cymbopogon citratus
+Zd-Momo-Draft-PanAnd-2.0	Zea diploperennis
+Zd-Momo-Draft-PanAnd-2.0	Zea diploperennis
+Tz-DC_05_58_3A-Draft-PanAnd-2.0	Tripsacum zopolitense
+Tz-DC_05_58_3A-Draft-PanAnd-2.0	Tripsacum zopolitense
+Td-FL_9056069_6-Draft-PanAnd-1.0	Tripsacum dactyloides
+Sm-PI203595-Draft-PanAnd-2.0	Schizachyrium microstachyum
+Sm-PI203595-Draft-PanAnd-2.0	Schizachyrium microstachyum
+Ss-CAM1384-Draft-PanAnd-0.3	Schizachyrium scoparium
+Ss-CAM1384-Draft-PanAnd-2.0	Schizachyrium scoparium
+Zv-TIL01-Draft-PanAnd-0.1	Zea mays ssp. parviglumis
+Zv-TIL01-Draft-PanAnd-2.0	Zea mays ssp. parviglumis
+Zv-TIL01-Reference-PanAnd-2.0	Zea mays ssp. parviglumis
+Zv-TIL01-Draft-PanAnd-0.1	Zea mays ssp. parviglumis
+Td-FL_9056069_6-Draft-PanAnd-0.1	Tripsacum dactyloides
+Td-FL_9056069_6-Draft-PanAnd-1.0	Tripsacum dactyloides
+Zx-TIL18-Draft-PanAnd-0.1	Zea mays ssp. mexicana
+Zx-TIL18-Draft-PanAnd-1.0	Zea mays ssp. mexicana
+Zx-TIL18-Reference-PanAnd-1.0	Zea mays ssp. mexicana
+Zx-TIL18-Reference-PanAnd-1.1	Zea mays ssp. mexicana
+Ag-CAM1351-Draft-PanAnd-1.0	Andropogon gerardii
+Ag-CAM1351-Draft-PanAnd-2.0	Andropogon gerardii
+Ag-CAM1351-Draft-PanAnd-2.0	Andropogon gerardii
+Hc-AUB53-1-Draft-PanAnd-2.1	Heteropogon contortus
+Av-Kellogg1287-8-Draft-PanAnd-2.1	Andropogon virginicus
