@@ -340,63 +340,6 @@ Diploperennis == mess
 Nicaraguensis, huehuetengensis, zopolitense == contig (would need to scaffold them)
 
 These are the genome files names
-```
-Zx-PI566673-REFERENCE-YAN-1.0	Zea mays ssp. mexicana
-Zx-TIL25-Draft-PanAnd-1.0	Zea mays ssp. mexicana
-Zx-TIL25-Reference-PanAnd-1.0	Zea mays ssp. mexicana
-Zx-TIL25-Draft-PanAnd-0.1	Zea mays ssp. mexicana
-Zx-TIL18-Draft-PanAnd-0.1	Zea mays ssp. mexicana
-Zx-TIL18-Draft-PanAnd-1.0	Zea mays ssp. mexicana
-Zx-TIL18-Reference-PanAnd-1.0	Zea mays ssp. mexicana
-Zx-TIL18-Reference-PanAnd-1.1	Zea mays ssp. mexicana
-
-Zv-TIL11-Draft-Panzea-1.0	Zea mays ssp. parviglumis
-Zv-TIL11-Reference-PanAnd-2.0_UnplacedScaffolds	Zea mays ssp. parviglumis
-Zv-TIL11-Reference-PanAnd-2.0	Zea mays ssp. parviglumis
-Zv-TIL01-Draft-PanAnd-0.1	Zea mays ssp. parviglumis
-Zv-TIL01-Draft-PanAnd-2.0	Zea mays ssp. parviglumis
-Zv-TIL01-Reference-PanAnd-2.0	Zea mays ssp. parviglumis
-Zv-TIL01-Draft-PanAnd-0.1	Zea mays ssp. parviglumis
-
-Zd-Lulu-Draft-Panzea-0.5	Zea diploperennis
-Zd-Gigi-Draft-PanAnd-1.0	Zea diploperennis
-Zd-Gigi-Draft-PanAnd-2.0	Zea diploperennis
-Zd-Gigi-Draft-PanAnd-0.1	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-2.0	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-2.1	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-1.1	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-1.0	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-2.1	Zea diploperennis
-Zd-Gigi-Draft-PanAnd-0.2	Zea diploperennis
-Zd-Gigi-Reference-PanAnd-1.1	Zea diploperennis
-Zd-Momo-Draft-PanAnd-2.0	Zea diploperennis
-Zd-Momo-Draft-PanAnd-2.0	Zea diploperennis
-
-Zl-RIL003-Draft-PanAnd-0.1	Zea luxurians
-Zl-RIL003-Draft-PanAnd-1.0	Zea luxurians
-Zl-RIL003-Draft-PanAnd-2.0	Zea luxurians
-Zl-RIL003-Reference-PanAnd-2.0	Zea luxurians
-
-Tz-DC_05_58_3A-Draft-PanAnd-2.0	Tripsacum zopolitense
-Tz-DC_05_58_3A-Draft-PanAnd-2.0	Tripsacum zopolitense
-
-Td-FL_9056069_6-Draft-PanAnd-1.0	Tripsacum dactyloides
-Td-FL_9056069_6-Draft-PanAnd-0.1	Tripsacum dactyloides
-Td-FL_9056069_6-Draft-PanAnd-1.0	Tripsacum dactyloides
-```
-from `/ptmp/arnstrm/LATEST_ANDRO_ASSEMBLIES/`, these are the genome files available/I want to use
-(3/9/2022)
-```
-#Mexicana
-Zx-TIL25-Reference-PanAnd-2.0.fasta.gz
-Zx-TIL18-Reference-PanAnd-2.0.fasta.gz
-#Parviglumis
-Zv-TIL01-Reference-PanAnd-2.0.fasta.gz	
-Zv-TIL11-Reference-PanAnd-2.0.fasta.gz
-#Luxurians
-Zl-RIL003-Reference-PanAnd-2.0.fasta.gz
-```
-Dactyloides is only available as scaffold assembly
 
 *Copy assemblies to my local directory*
 ```
@@ -439,17 +382,19 @@ Estimated Time to Run: _1 minute_
 ```
 ml singularity
 singularity exec --bind $PWD anchorwave.sif anchorwave gff2seq \
-	-r Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \ #ref genome sequence
-	-i Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 \ #ref genome annotation as gff or gff3
-	-o Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa #output file of longest CDS/exon for each gene
+	-r Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \ #ref genome sequence
+	-i Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 \ #ref genome annotation as gff or gff3
+	-o Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa #output file of longest CDS/exon for each gene
 ```
 
 ##Step 2: mapping with minimap2 to get anchorpoints
 Script: `slurm_02.minimapAnchorPoints.sh` and `02.minimapAnchorPoints.sh` (the if statement has weird colors in vi, not sure if it'll run...)
-Estimated Time to Run: _~3 minutes_
+Estimated Time to Run: _~35 minutes if unzipping all files_
+For running on Panand use directory `assemblies_final/`
+For running on NAM use directory `NAM-assemblies/` _took ~50 minutes with  unzipped files_
 ```
 FILE1=$1 #Genomic fasta file ID for maize genome (genomeID)) (example: Zm-B73-REFERENCE-NAM-5.0); be sure to make certain the fasta file extension in the script matches user file extension i.e. '.fasta' vs '.fa', etc)
-FileName=${FILE1#panand-assemblies/}
+FileName=${FILE1#assemblies_final/}
 ml minimap2
 
 minimap2 \
@@ -460,7 +405,7 @@ minimap2 \
 	-p 0.4 \ #Minimal secondary-to-primary score ratio to output secondary mappings
 	-N 20 \ #Output at most INT secondary alignments
 	${FILE1}.fasta \ #target fasta
-	Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > ${FileName}_Sbicolor_313_v3.0_cds.sam #query fasta and output file
+	Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > ${FileName}_Sbicolor_313_v3.0_cds.sam #query fasta and output file
 #Do I need to redo the minimap to sorghum to itself everytime? Could cut down with a if file exists exemption
 if [[ ! -f "Sbicolor_313_v3.0_ref.sam" ]] ; then
 	minimap2 \
@@ -470,19 +415,22 @@ if [[ ! -f "Sbicolor_313_v3.0_ref.sam" ]] ; then
 		-a \
 		-p 0.4 \
 		-N 20 \
-		Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \
-		Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > Sbicolor_313_v3.0_ref.sam
+		Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \
+		Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > Sbicolor_313_v3.0_ref.sam
 fi
 ```
 Trying it on `panand-assemblies/Zv-TIL01-Reference-PanAnd-2.0.fasta.gz`
 It worked, so doing it in a loop for the other genomes:
 ```
-for i in panand-assemblies/Z*.gz ; do
+for i in assemblies_final/*.gz ; do
         gunzip $i
         bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/02.minimapAnchorPoints.sh ${i%.fasta.gz}
 ;done
 ```
-
+Got this warning
+```
+[WARNING] SAM output is malformated due to internal @SQ lines. Please add option --no-sam-sq or filter afterwards.
+```
 Plot full length CDS mapping results? 
 Need the `alignmnetToDotplot.pl` script from anchorwave github
 ```
@@ -543,14 +491,18 @@ Will not run on gzipped fasta files
 Timed out after 12 hours
 -r = ref genome (-R is max ref alignment coverage)
 -s = target genome sequence (-Q = query max alignment coverage 
+
+For running on Panand use directory `assemblies_final/`
+For running on NAM use directory `NAM-assemblies/`
+
 ```
 FILE1=$1
-FileName=${FILE1#panand-assemblies/}
+FileName=${FILE1#assemblies_final/}
 ml singularity
 singularity exec --bind $PWD anchorwave.sif anchorwave proali \
-	-i Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 \ 
-	-as Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa \
-	-r Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \ 
+	-i Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 \ 
+	-as Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa \
+	-r Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \ 
 	-a ${FileName}_Sbicolor_313_v3.0_cds.sam \ 
 	-ar Sbicolor_313_v3.0_ref.sam \ 
 	-s ${FILE1}.fasta \ 
@@ -578,14 +530,21 @@ singularity exec --bind $PWD anchorwave.sif anchorwave proali \
 #SBATCH --mail-type=FAIL
 #SBATCH --exclusive
 
-bash scripts/03.AnchorWaveAlignment.sh panand-assemblies/Zv-TIL01-Reference-PanAnd-2.0
+bash scripts/03.AnchorWaveAlignment.sh assemblies_final/Zv-TIL01-Reference-PanAnd-2.0
 ```
 To make multiple slurm scripts for parallel job submission
 ```
-for i in panand-assemblies/*.fasta ; do
-	echo bash scripts/03.AnchorWaveAlignment.sh ${i%.fasta} >> AnchorWave.cmds.txt
+for i in assemblies_final/*.fasta ; do
+	echo bash scripts/03.AnchorWaveAlignment.sh ${i%.fasta} >> scripts/AnchorWave.cmds.txt
 done
 python makeSLURM.py 1 AnchorWave.cmds.txt
+```
+Testing with sub command 9 (Zx TIL25)
+```
+#but to set the other ones up to run if it completes ok
+for i in {0..8}; do
+	sbatch --dependency=afterok:4196500 scripts/AnchorWave.cmds_${i}.sub ;
+done
 ```
 
 ##Step 4: convert MAF to GVCF formats
