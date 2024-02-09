@@ -1,6 +1,11 @@
 #pSONIC pipeline
 
 ##0: reformat GFF
+This step is to ensure we are only using the primary or canonical transcript for each genome's annotation. 
+We also filter out any scaffolds that contain < 5 genes. 
+This speeds up computational time in later steps. 
+Because the Sorghum annotation was done by a different group, the gff file is formatted differently.
+I am using the file `Sbicolor_313_v3.1.cds+primaryTranscriptOnly.fa.gz` from `https://data.jgi.doe.gov/refine-download/phytozome?q=313&expanded=Phytozome-313`
 
 _Base Script_
 `05.0.pSONIC.reformatGFF.sh`
@@ -54,23 +59,31 @@ gunzip annotations_final/Td-FL_9056069_6-DRAFT-PanAnd-1.0_final.gff3.gz
 
 #for PanAnd Directory
 for i in Zv-TIL01 Zx-TIL18 Zd-Gigi Td-FL_9056069_6 ; do
+	gunzip annotations_final/${i}*.gff3.gz
 	bash scripts/05.0.pSONIC.reformatGFF.sh annotations_final/${i}-*.gff3 ${i}
 done
 
 #for NAM Directory
 for i in Zm-B73 ; do
+	gunzip NAM-annotations/${i}*.gff3.gz
 	bash scripts/05.0.pSONIC.reformatGFF.sh NAM-annotations/${i}-*.gff3 ${i}
 done
 
-#add in unique modifiers to gene names so they're unique
-#This step can be eliminated if the naming convention is unique for each genome
-#sed -i 's/ID=/ID=Zv-TIL01_/g' Zv-TIL01-primary-5andup.gff
-#sed -i 's/Parent=/Parent=Zv-TIL01_/g' Zv-TIL01-primary-5andup.gff
-#sed -i 's/Name=/Name=Zv-TIL01_/g' Zv-TIL01-primary-5andup.gff
+#for sorghum directory
+#Sorghum 313 already has a primary transcript file associated with it, so we don't need to make it
 
-#sed -i 's/ID=/ID=Zx_TIL18_/g' Zx-TIL18-primary-5andup.gff
-#sed -i 's/Parent=/Parent=Zx_TIL18_/g' Zx-TIL18-primary-5andup.gff
-#sed -i 's/Name=/Name=Zx_TIL18_/g' Zx-TIL18-primary-5andup.gff
+gunzip Sbicolor_313_v3.1.cds_primaryTranscriptOnly.fa.gz
+grep "^>" Sbicolor_313_v3.1.cds_primaryTranscriptOnly.fa | cut -f 4-5 -d " " | sed 's/locus=//g' - | sed 's/ID=//g' - | awk -v OFS='\t' '{print $1,$2.v3.1}' - > Sb-313-v3-primary-transcript-ids.txt
+
+ml singularity
+singularity exec --bind $PWD /work/LAS/mhufford-lab/arnstrm/PanAnd/triffid/current-versions-genomes.triffid/mikado-v2.3.sif mikado util grep Sb-313-v3-primary-transcript-ids.txt Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 Sb-313-v3-primary-transcript.gff
+
+#filters out scaffolds  with less than 5 genes
+## get scaffold names that have less than 5 genes
+grep super Sb-313-v3-primary-transcript.gff | awk -v OFS='\t' '$3=="gene" {print $1}' - | sort | uniq -c | sed 's/ //g' - | tr '[0-9]s' '[0-9]\t'| sed 's/uper/super/g' - | awk -v OFS='\t' '$1 < 5 {print $2}' - > Sb-313-v3.scaf.ids
+
+## use grep to exclude scaffolds that don't pass
+grep -vwF -f Sb-313-v3.scaf.ids Sb-313-v3-primary-transcript.gff > Sb-313-v3-primary-5andup.gff3
 ```
 
 *Quality Control Check*
@@ -78,6 +91,8 @@ Make sure that the number of genes pulled out of the original gff matches your e
 ```
 grep -v "^#" {genome}-primary-5andup.gff3 |cut -f 3 |sort |uniq -c
 ```
+
+I moved all of the files into `primarytranscriptfiles` and then moved all the `5andup.gff3` files back to the working directory to keep things neat. 
 
 ##1: Convert GFF to proteome fasta
 
@@ -87,6 +102,8 @@ _Base Script_
 genome=$1
 gff=$2
 outname=$3
+
+module use /opt/rit/spack-modules/lmod/linux-rhel7-x86_64/Core/
 
 #make a fasta file index for faster jobs
 module load samtools
@@ -120,19 +137,26 @@ for i in Zv-TIL01 Zx-TIL18 Zd-Gigi Td-FL_9056069_6 ; do
 	gunzip assemblies_final/${i}*.fasta.gz
 done
 
-#for NAM Directory (WHICH NAM ASSEMBLIES TO USE MASKED OR UNMASKED?)
+#for NAM Directory 
 for i in Zm-B73 ; do
 	gunzip NAM-annotations/${i}-*.gff3 ${i}
 done
 
-gunzip assemblies_final/Zv-TIL01-REFERENCE-PanAnd-1.0.fasta.gz
-gunzip assemblies_final/Zx-TIL18-REFERENCE-PanAnd-1.0.fasta.gz
-
 mkdir cds-fastas
 mkdir pep-fastas
 
-bash scripts/05.1.pSONIC.orthofinderInputs.sh assemblies_final/Zv-TIL01-REFERENCE-PanAnd-1.0.fasta Zv-TIL01-primary-5andup.gff3 Zv-TIL01
-bash scripts/05.1.pSONIC.orthofinderInputs.sh assemblies_final/Zx-TIL18-REFERENCE-PanAnd-1.0.fasta Zx-TIL18-primary-5andup.gff3 Zx-TIL18
+#for PanAnd Directory
+for i in Zv-TIL01 Zx-TIL18 Zd-Gigi Td-FL_9056069_6 ; do
+	bash scripts/05.1.pSONIC.orthofinderInputs.sh assemblies_final/${i}*.fasta ${i}-primary-5andup.gff3 ${i} ; 
+done
+
+#for NAM Directory
+for i in Zm-B73 Zm-CML333 Zm-NC358 Zm-Oh43 ; do
+	bash scripts/05.1.pSONIC.orthofinderInputs.sh NAM-assemblies/${i}*.fasta ${i}-primary-5andup.gff3 ${i} ; 
+done
+
+#for sorghum directory
+bash scripts/05.1.pSONIC.orthofinderInputs.sh Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa Sb-313-v3-primary-5andup.gff3 Sb-313-v3
 
 mv *cds.fasta cds-fastas/.
 mv *pep.fasta pep-fastas/.
@@ -140,13 +164,14 @@ mv *pep.fasta pep-fastas/.
 ml bioawk
 cd pep-fastas
 for i in *.pep.fasta ; 
-	do bioawk -c fastx '{gsub(/\./,"*",$seq); print ">"$name"\n"$seq}' $i > ${i%.fasta}.faa ; 
-	rm $i ;  
+	do bioawk -c fastx '{gsub(/\./,"*",$seq); print ">"$name"\n"$seq}' $i > ${i%.fasta}.faa ;  
 done
 ```
 
 *Quality Control Check*
 Check the line count of the .faa files, should be 2x the number of genes in the gff
+_I will need to change the bioawk step in the above script so that it'll run in a loop...won't right now_
+_Probably due to the remove ${i} command at the end (removed that line so we'll see if it runs correctly now_
 
 ##2. Run Orthofinder
 
@@ -155,6 +180,7 @@ _Base Script_
 ```
 pepdir=$1
 
+module use /opt/rit/spack-modules/lmod/linux-rhel7-x86_64/Core/
 ml miniconda3
 
 source /work/LAS/mhufford-lab/arnstrm/miniconda/etc/profile.d/conda.sh
@@ -172,7 +198,7 @@ _~6.5 minutes on 2 genomes_
 #    sbatch thefilename
 # job standard output will go to the file slurm-%j.out (where %j is the job ID)
 
-#SBATCH --time=00:30:00   # walltime limit (HH:MM:SS)
+#SBATCH --time=24:00:00   # walltime limit (HH:MM:SS)
 #SBATCH --nodes=1   # number of nodes
 #SBATCH --exclusive   # take over the nodes processors and memory - all for yourself 
 #SBATCH --partition=amd
@@ -276,7 +302,7 @@ _~3sec_
 #SBATCH --time=00:30:00   # walltime limit (HH:MM:SS)
 #SBATCH --nodes=1   # number of nodes
 #SBATCH --exclusive   # take over the nodes processors and memory - all for yourself 
-#SBATCH --partition=amd
+c#SBATCH --partition=amd
 #SBATCH --mail-user=snodgras@iastate.edu   # email address
 #SBATCH --mail-type=END
 #SBATCH --mail-type=FAIL

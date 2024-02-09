@@ -1334,10 +1334,6 @@ Make a directory for the sam files to go to:
 ```
 mkdir sam_files
 ```
-And make a softlink for the Av genome to the split genomes file
-```
-ln -s /work/LAS/mhufford-lab/snodgras/Fractionation/assemblies_final/Av-Kellogg1287_8-REFERENCE-PanAnd-1.0.fasta split_genome_assemblies/Av.fasta
-```
 ```bash script
 FILE1=$1 #Genomic fasta file ID for maize genome (genomeID)) (example: Zm-B73-REFERENCE-NAM-5.0); be sure to make certain the fasta file extension in the script matches user file extension i.e. '.fasta' vs '.fa', etc)
 FileName=${FILE1#split_genome_assemblies/}
@@ -1367,11 +1363,163 @@ minimap2 \
 	Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > sam_files/${FileName%.fasta}_Sb313.cds.sam #query fasta and output file
 ```
 
-```slurm script
-for i in split_genome_assemblies/*.fasta ; do
-        bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/02.minimapAnchorPoints.sh ${i}
-;done
+`slurm_02.minimapAnchors.sh`
+
+##Find tandem repeats? Filter Sb313 genes to be those that aren't repeats and found in Av?
+Let's start with sorghum's repeats
 ```
+ml trf
+trf ${sample} 2 7 7 80 10 50 2000 -l 1 -d -h
+```
+using Maggie's orthologs from NAM paper `Sbicolor_313_v3.1_non-tandem_gene_models_from_exons_primary_notandems_cshl_clusters4.txt`
+and Arun's filtered orthogroups `sbicol_avirgi.tsv`
+```
+tail -n +2 Sbicolor_313_v3.1_non-tandem_gene_models_from_exons_primary_notandems_cshl_clusters4.txt | grep -w -f - sbicol_avirgi.tsv > test.txt
+
+
+#filter CDS bed with Maggie's no tandem set
+tail -n +2 ../code/Sbicolor_313_v3.1_non-tandem_gene_models_from_exons_primary_notandems_cshl_clusters4.txt | grep -w -f - Sb313.CDS.bed > notandems.Sb313.CDS.bed
+
+#count the number of CDS (exons) per gene
+##split the ID string into parent and child ID
+
+cut -f 4 notandems.Sb313.CDS.bed | sed -e 's/;/\t/g' |cut -f 2 | sort | uniq -c | awk '{print $2"\t"$1}' - > Sb313.exonCntsPerGene.txt
+
+#repeat with Av gff
+awk -v OFS='\t' '$3 == "exon" && $7 == "+" {print $1,$4-1,$5,$9,$7}; $3 == "exon" && $7 == "-" {print $1,$4,$5+1,$9,$7}' Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_final.gff3 > Av.exon.bed
+
+cut -f 4 Av.exon.bed |sed -e 's/;/\t/g' | cut -f 1 | sort |uniq -c | awk '{print $2"\t"$1}' - > Av.exonCntsPerGene.txt
+
+grep -v "," sbicol_avirgi.tsv | awk -v OFS='\t' 'NF == 3 {print $0}' - > one-one_sbicol_avirgi.tsv 
+
+#Use the OGs from Arun to create a gene ID key by adding OG as a column to the exonCnts
+while read line ; do 
+	ID=$(echo $line | sed 's/Parent=//g' - |cut -f 1 -d " ")
+	OG=$(grep -w $ID sbicol_avirgi.tsv | cut -f 1)
+	echo $line $OG >> Av.exonCntsPerGene.OG.txt
+done < Av.exonCntsPerGene.txt
+
+while read line ; do 
+	ID=$(echo $line | sed 's/Parent=//g' - | cut -f 1-3 -d ".")
+	OG=$(grep -w $ID sbicol_avirgi.tsv | cut -f 1)
+	echo $line $OG >> Sb313.exonCntsPerGene.OG.txt
+done < Sb313.exonCntsPerGene.txt
+
+while read line ; do
+        ID=$(echo $line | sed 's/Parent=//g' - |cut -f 1 -d " ")
+        OG=$(grep -w $ID one-one_sbicol_avirgi.tsv | cut -f 1)
+        echo $line $OG >> Av.exonCntsPerGene.one-one.OG.txt
+done < Av.exonCntsPerGene.txt
+
+while read line ; do
+        ID=$(echo $line | sed 's/Parent=//g' - | cut -f 1-3 -d ".")
+        OG=$(grep -w $ID one-one_sbicol_avirgi.tsv | cut -f 1)
+        echo $line $OG >> Sb313.exonCntsPerGene.one-one.OG.txt
+done < Sb313.exonCntsPerGene.txt
+
+#compare the number of exons per gene ID in Sb313 vs Av
+sed -i "s/sbicol_avirgi.tsv://g" Av.exonCntsPerGene.OG.txt
+sed -i "s/sbicol_avirgi.tsv://g" Av.exonCntsPerGene.one-one.OG.txt
+
+
+join -1 3 -2 3 -e '-' -a1 -a2 <(sort -k 3 Av.exonCntsPerGene.OG.txt) <(sort -k 3 Sb313.exonCntsPerGene.OG.txt) > joined.exonCntsPerGene.OG.txt
+
+join -1 3 -2 3 -e '-'  -a1 -a2 <(sort -k 3 Av.exonCntsPerGene.one-one.OG.txt) <(sort -k 3 Sb313.exonCntsPerGene.one-one.OG.txt) > joined.exonCntsPerGene.one-one.OG.txt
+
+grep OG joined.exonCntsPerGene.one-one.OG.txt > joined.exonCntsPerGene.one-one.nonulls.OG.txt
+awk -v OFS='\t' '$3 == $5 {print $0}' joined.exonCntsPerGene.one-one.nonulls.OG.txt > same.exonCntsPerGene.txt
+
+wc -l same.exonCntsPerGene.txt 
+9491 
+awk 'NF == 5 {print}' joined.exonCntsPerGene.one-one.nonulls.OG.txt | wc -l 
+15690
+
+```
+Maggie also created lift over files of each Sb annotation and Av (reciprocal liftovers)
+```
+unzip Av_sorghum_lifted_gff_files_and_CDS_counts.zip 
+unzip Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_noexon_lifted_to_Sbicolor_313_v3.1.gene_synteny_status_sorted.gff3.zip 
+
+cd Av_sorghum_lifted_gff_files_and_CDS_counts/counts_of_CDSs_that_match_in_length_and_location/
+
+awk -v OFS='\t' '$4 == $5 {print $0}' Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_noexon_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt | wc -l 
+  21081
+
+wc -l Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_noexon_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt 
+   79716 Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_noexon_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+   
+awk -v OFS='\t' '$4 == $5 {print $0}' Av-Kellogg1287_8-REFERENCE-PanAnd-1.0_noexon_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt | awk -v OFS='\t' '{tmp = $5 / $2 }; {print $1,$2,$3,$4,tmp}' - > Av_Sb313_CDS-counts.allCDSsamelength.percentage.txt
+#This give the counts for a histogram of the coverage of the exact matched Av exons to the Sb exons
+cut -f 5 Av_Sb313_CDS-counts.allCDSsamelength.percentage.txt | sort | uniq -c 
+#notably, of the 21K, ~18K have exact match (Same number of exons, exact same lengths) (exact number is 17933)
+
+awk -v OFS="\t" '$5 == 1 {print $0 }' Av_Sb313_CDS-counts.allCDSsamelength.percentage.txt | cut -f 1 | sort | uniq | wc -l  
+   17906 #number of exact matches that are unique Sb313 gene IDs
+
+awk -v OFS="\t" '$5 == 1 {print $0 }' Av_Sb313_CDS-counts.allCDSsamelength.percentage.txt > Av_Sb313_ExactMatchesOnly.txt
+
+grep -f ../../Sbicolor_313_v3.1_non-tandem_gene_models_from_exons_primary_notandems_cshl_clusters4.txt Av_Sb313_ExactMatchesOnly.txt > Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt
+wc -l Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt 
+   15111 Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt
+
+cut -f 1 Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt | cut -f 1-2 -d "." | sort | uniq | wc -l 
+   12169 #Just uniq gene models?
+   
+#How to deal with isoforms:
+#keep the one with the most exons
+#if a tie, pick one at random
+#This will be easiest to do in R
+   
+#Let's repeat with the other sorghum annotations:
+#SbicolorBTx642_564_v1.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+#SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+#SbicolorSC187_694_v1.1.gene_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+
+#how many where there is an exact match between the number of lifted exons and the number of exons with same length
+for i in SbicolorBTx642_564_v1.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorSC187_694_v1.1.gene_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt ; do
+awk -v OFS='\t' '$4 == $5 {print $0}' $i | wc -l 
+done
+
+   36287
+   36098
+   36449
+
+#how many lifted over gene models total
+for i in SbicolorBTx642_564_v1.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorSC187_694_v1.1.gene_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt ; do
+wc -l $i
+done
+   77059 SbicolorBTx642_564_v1.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+   72157 SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+   75738 SbicolorSC187_694_v1.1.gene_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt
+
+#make percentage column for number of lifted over 100% exact match exons/# of Sb313 exons in model
+for i in SbicolorBTx642_564_v1.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt SbicolorSC187_694_v1.1.gene_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt ; do
+awk -v OFS='\t' '$4 == $5 {print $0}' $i | awk -v OFS='\t' '{tmp = $5 / $2 }; {print $1,$2,$3,$4,tmp}' - > ${i%_v1.1.gene*txt}_Sb313.allCDSsamelength.percentage.txt
+done
+mv SbicolorRTx430_552_v2.1.gene_Chr_vs_Sbicolor_313_v3.1.gene_CDS-counts.txt_Sb313.allCDSsamelength.percentage.txt SbicolorRTx430_552_Sb313.allCDSsamelength.percentage.txt
+
+#This gets the number for exact match instead of creating all histogram values like the uniq -c command did for Av
+for i in Sbicolor*percentage.txt ; do 
+cut -f 5 $i | awk -v OFS='\t' '$1 == 1 {print $0}' - | wc -l
+done
+   35558 #97.99% of original exact match
+   35529 #98.42% of original exact match
+   35909 #98.52% of original exact match
+
+#This removes multimapping to the same gene model
+for i in Sbicolor*percentage.txt ; do awk -v OFS='\t' '$5 == 1 {print $0}' $i | cut -f 1 | sort | uniq | wc -l; done
+   28186
+   28375
+   26655
+
+
+```
+Collapse exons 
+```
+bedtools sort -i test.Sb313.CDS.bed | bedtools merge -c 4 -o distinct -i - > merged.test.Sb313.CDS.bed
+
+```
+
 ##Run Anchorwave
 Make sure that Av is 1:1 and the rest is 2:1
 ```03.runAnchorWave.Tripsacinae.sh
@@ -1426,35 +1574,32 @@ echo bash scripts/03.runAnchorWave.Tripsacinae.sh assemblies_final/Zx-TIL18-REFE
 echo bash scripts/03.runAnchorWave.Tripsacinae.sh assemblies_final/Zh-RIMHU001-REFERENCE-PanAnd-1.0 ZhRIMHU001 >> scripts/AnchorWave.cmds.txt      
 echo bash scripts/03.runAnchorWave.Tripsacinae.sh assemblies_final/Zx-TIL25-REFERENCE-PanAnd-1.0 ZxTIL25 >> scripts/AnchorWave.cmds.txt
 
-
-
-echo bash scripts/03.runAnchorWave.Tripsacinae.sh
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-B73 ZmB73
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-B97 ZmB97
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML103 ZmCML103
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML228 ZmCML228
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML247 ZmCML247
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML277 ZmCML277
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML322 ZmCML322
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML333 ZmCML333
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML52 ZmCML52
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML69 ZmCML69
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-HP301 ZmHP301
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-IL14H ZmIL14H
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ki11 ZmKi11
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ki3 ZmKi3
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ky21 ZmKy21
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-M162W ZmM162W
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-M37W ZmM37W
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Mo18W ZmMo18W
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-MS71 ZmMS71
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-NC350 ZmNC350
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-NC358 ZmNC358
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Oh43 ZmOh43
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Oh7b ZmOh7b
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-P39 ZmP39
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Tx303 ZmTx303
-bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Tzi8 ZmTzi8 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-B73 ZmB73 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-B97 ZmB97 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML103 ZmCML103 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML228 ZmCML228 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML247 ZmCML247 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML277 ZmCML277 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML322 ZmCML322 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML333 ZmCML333 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML52 ZmCML52 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-CML69 ZmCML69 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-HP301 ZmHP301 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-IL14H ZmIL14H >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ki11 ZmKi11 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ki3 ZmKi3 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Ky21 ZmKy21 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-M162W ZmM162W >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-M37W ZmM37W >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Mo18W ZmMo18W >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-MS71 ZmMS71 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-NC350 ZmNC350 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-NC358 ZmNC358 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Oh43 ZmOh43 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Oh7b ZmOh7b >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-P39 ZmP39 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Tx303 ZmTx303 >> scripts/AnchorWave.cmds.txt
+echo bash scripts/03.runAnchorWave.Tripsacinae.sh NAM-assemblies/Zm-Tzi8 ZmTzi8 >> scripts/AnchorWave.cmds.txt
 
 python makeSLURM.py 1 AnchorWave.cmds.txt
 
@@ -1475,46 +1620,107 @@ Want to include luxurians both in alignment to Sorghum and to B73
 cp AnchorWave.cmds_1.sub AnchorWave.cmds_36.sub
 #edit to be 
 bash scripts/03.runAnchorWave.Tripsacinae.sh assemblies_final/Zl-RIL003-REFERENCE-PanAnd-1.0 ZlRIL003
+```
 
-#then make separate slurm script that will use B73 as reference
-#slurm_03.ZmB73vsZlux.AnchorWave.sh
-ml minimap2
-minimap2 \
-	-x splice \
-	-t 11 \
-	-k 12 \
-	-a \
-	-p 0.4 \
-	-N 20 \
-	NAM-assemblies/Zm-B73.fasta \
-	NAM-annotations/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3 > sam_files/ZmB73.ref.sam
-
-
-minimap2 \
-	-x splice \
-	-t 11 \
-	-k 12 \
-	-a \
-	-p 0.4 \
-	-N 20 \
-	assemblies_final/Zl-RIL003-REFERENCE-PanAnd-1.0 Zl-RIL003.fasta  \
-	NAM-assemblies/Zm-B73.fasta  > sam_files/ZlRIL003_Sb313.cds.sam
-
-ml singularity
-singularity exec --bind $PWD anchorwave.sif anchorwave proali \
-	-i NAM-annotations/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3 \
-	-as NAM-assemblies/Zm-B73.fasta \
-	-r NAM-assemblies/Zm-B73 \
-	-a sam_files/ZlRIL003_ZmB73.cds.sam \
-	-ar sam_files/ZmB73.ref.sam \
-	-s assemblies_final/Zl-RIL003-REFERENCE-PanAnd-1.0 Zl-RIL003.fasta \
-	-n AnchorWave_output/ZmB73_ZlRIL003_anchorwave.anchors \
-	-R 1 \
-	-Q 1 \
-	-o AnchorWave_output/ZmB73_ZlRIL003_anchorwave.maf \
-	-t 5 > AnchorWave_logs/ZmB73_ZlRIL003_anchorwave.log 2>&1 
+## Identifying gap regions from the assemblies
 
 ```
+#Testing on Zd-Gigi first
+cd assemblies_final/
+module load seqtk
+seqtk cutN -gp10000000 -n1 Zd-Gigi-REFERENCE-PanAnd-1.0.fasta > Zd-Gigi.ngaps.bed
+
+grep "chr9" ZdGigi_chr9_Chr10_sorted_filtered.maf | cut -f 1-7 -d " " | awk -v OFS='\t' '$4 > $3 {print $2,$3,$4}; $4 < $3 {print $2,$4,$3}' - > Zd-Gigi-maftemp.bed
+
+ml bedtools2
+bedtools intersect -a Zd-Gigi-maftemp.bed -b ../assemblies_final/Zd-Gigi.ngaps.txt 
+
+for i in Av-Kellogg1287_8 Td-FL Zd-Momo Zh-RIMHU001 Zl-RIL003 Zn-PI615697 Zv-TIL01 Zv-TIL11 Zx-TIL18 Zx-TIL25 ; do
+seqtk cutN -gp10000000 -n1 ${i}*.fasta > ${i}.ngaps.bed ; done
+
+cd ../NAM-assemblies/
+for i in *.fasta ; do
+seqtk cutN -gp10000000 -n1 ${i} > ${i%.fasta}.ngaps.bed ; done 
+
+```
+##Testing to see if the gap regions are causing issues with the deletion calls
+```
+mkdir unzipped_gvcf
+gunzip trimmed_Sb313_ZdGigi_Chr10.bin1.gvcf.gz 
+gunzip trimmed_Sb313_ZdGigi_Chr10.bin2.gvcf.gz 
+mv trimmed*gvcf unzipped_gvcf/
+cd unzipped_gvcf
+grep -v "^#" trimmed_Sb313_ZdGigi_Chr10.bin1.gvcf | awk -v OFS='\t' '{print $8,$10}' - > ZdGigi.bin1.genotypes.txt
+cut -f 2 ZdGigi.bin1.genotypes.txt | cut -f 1 -d ":" | sort | uniq -c
+grep -v "^#" trimmed_Sb313_ZdGigi_Chr10.bin2.gvcf | awk -v OFS='\t' '{print $8,$10}' - > ZdGigi.bin2.genotypes.txt
+cut -f 2 ZdGigi.bin2.genotypes.txt | cut -f 1 -d ":" | sort | uniq -c
+
+cut -f 1 ZdGigi.bin1.genotypes.txt | cut -f 1 -d ";" - | sed "s/ASM_Chr=/chr/g" > bin1.chr.temp
+cut -f 1 ZdGigi.bin1.genotypes.txt | cut -f 2 -d ";" - | sed "s/ASM_End=//g"> bin1.end.temp
+cut -f 1 ZdGigi.bin1.genotypes.txt | cut -f 3 -d ";" - | sed "s/ASM_Start=//g" > bin1.start.temp
+
+cut -f 1 ZdGigi.bin1.genotypes.txt | paste bin1.chr.temp bin1.start.temp bin1.end.temp - > bin1.bed.temp
+awk -v OFS='\t' '$2 < $3 {print $0}; $2 > $3 {print $1, $3, $2, $4}' bin1.bed.temp > bin1.bed
+
+ml bedtools2
+bedtools intersect -wb -a ../../assemblies_final/Zd-Gigi.ngaps.txt -b bin1.bed | cut -f 7 - > bin1.gaps.to.check.txt
+grep -f bin1.gaps.to.check.txt trimmed_Sb313_ZdGigi_Chr10.bin1.gvcf > bin1.gap.vcf.lines
+
+while read line ; do echo $line | cut -f 5 -d " "| wc -c ; done <bin1.gap.vcf.lines 
+#This counts the number of characters for the ALT allele
+while read line ; do echo $line | cut -f 4 -d " " |wc -c ; done <bin1.gap.vcf.lines 
+#This counts the number of characters for the REF allele
+####NOTE THAT ALL THE ONES THAT INTERSECT FOR BIN1 ARE INSERTIONS
+
+# repeat for bin2
+cut -f 1 ZdGigi.bin2.genotypes.txt | cut -f 1 -d ";" - | sed "s/ASM_Chr=/chr/g" > bin2.chr.temp
+cut -f 1 ZdGigi.bin2.genotypes.txt | cut -f 2 -d ";" - | sed "s/ASM_End=//g"> bin2.end.temp
+cut -f 1 ZdGigi.bin2.genotypes.txt | cut -f 3 -d ";" - | sed "s/ASM_Start=//g" > bin2.start.temp
+
+cut -f 1 ZdGigi.bin2.genotypes.txt | paste bin2.chr.temp bin2.start.temp bin2.end.temp - > bin2.bed.temp
+awk -v OFS='\t' '$2 < $3 {print $0}; $2 > $3 {print $1, $3, $2, $4}' bin2.bed.temp > bin2.bed
+
+bedtools intersect -wb -a ../../assemblies_final/Zd-Gigi.ngaps.txt -b bin2.bed | cut -f 7 - > bin2.gaps.to.check.txt
+grep -f bin2.gaps.to.check.txt trimmed_Sb313_ZdGigi_Chr10.bin2.gvcf > bin2.gap.vcf.lines
+
+while read line ; do echo $line | cut -f 5 -d " "| wc -c ; done <bin2.gap.vcf.lines 
+while read line ; do echo $line | cut -f 4 -d " " |wc -c ; done <bin2.gap.vcf.lines 
+
+##Turn it into a bash script (checkgaps.sh)
+ngap=$1 #../../assemblies_final/Zd-Gigi.ngaps.txt
+gvcf=$2 #trimmed_Sb313_ZdGigi_Chr10.bin1.gvcf.gz
+out=$3 #ZdGigi.bin1
+
+if [[ ! -f ${gvcf%.gz} ]] ; then gunzip ${gvcf} ; fi
+
+grep -v "^#" ${gvcf%.gz} |  awk -v OFS='\t' '{print $8,$10}' - > ${out}.genotypes.txt
+cut -f 1 ${out}.genotypes.txt | cut -f 1 -d ";" - | sed "s/ASM_Chr=/chr/g" > ${out}.chr.temp
+cut -f 1 ${out}.genotypes.txt | cut -f 2 -d ";" - | sed "s/ASM_End=//g"> ${out}.end.temp
+cut -f 1 ${out}.genotypes.txt | cut -f 3 -d ";" - | sed "s/ASM_Start=//g" > ${out}.start.temp
+
+cut -f 1 ${out}.genotypes.txt | paste ${out}.chr.temp ${out}.start.temp ${out}.end.temp - > ${out}.bed.temp
+awk -v OFS='\t' '$2 < $3 {print $0}; $2 > $3 {print $1, $3, $2, $4}' ${out}.bed.temp > ${out}.bed
+
+ml bedtools2
+bedtools intersect -wb -a ${ngap} -b ${out}.bed | cut -f 7 - > ${out}.gaps.to.check.txt
+grep -f ${out}.gaps.to.check.txt ${gvcf%.gz} > ${out}.gap.vcf.lines
+
+echo The number of characters for ${out} ALT alleles with gaps: 
+while read line ; do echo $line | cut -f 5 -d " "| wc -c ; done <${out}.gap.vcf.lines
+echo The number of characters for ${out} REF alleles with gaps: 
+while read line ; do echo $line | cut -f 4 -d " " |wc -c ; done <${out}.gap.vcf.lines 
+
+
+bash checkgaps.sh ../../assemblies_final/Td-FL.ngaps.bed ../trimmed_Sb313_TdFL_Chr10.bin1.gvcf.gz TdFL.bin1
+bash checkgaps.sh ../../assemblies_final/Td-FL.ngaps.bed ../trimmed_Sb313_TdFL_Chr10.bin2.gvcf.gz TdFL.bin2
+
+bash checkgaps.sh ../../assemblies_final/Zv-TIL01.ngaps.bed ../trimmed_Sb313_ZvTIL01_Chr10.bin1.gvcf.gz ZvTIL01.bin1
+bash checkgaps.sh ../../assemblies_final/Zv-TIL01.ngaps.bed ../trimmed_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz ZvTIL01.bin2
+
+bash checkgaps.sh ../../NAM-assemblies/Zm-B73.ngaps.bed ../trimmed_Sb313_ZmB73_Chr10.bin1.gvcf.gz ZmB73.bin1
+bash checkgaps.sh ../../NAM-assemblies/Zm-B73.ngaps.bed ../trimmed_Sb313_ZmB73_Chr10.bin2.gvcf.gz ZmB73.bin2
+```
+_It looks like any gap regions are always within large insertion calls where the ALT allele is much larger than the REF allele_
 
 #Swap coordinates of MAF
 Use script `https://github.com/baoxingsong/AnchorWave/blob/master/scripts/anchorwave-maf-swap.py`
@@ -1524,119 +1730,24 @@ cat Sb313_${genome}_anchorwave.maf | python /work/LAS/mhufford-lab/snodgras/Frac
 
 ###SLURM
 bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/03.5.swapMAF.sh TdFL
-```
 
-#Split MAF by parsing coordinates
-_Check MAF with IGV_
-I can't get IGV to load MAF Correctly: `https://github.com/igvteam/igv/blob/master/test/data/maf_ucsc/ucscSample.maf`
-*Tool Options*
-`/ptmp/arnstrm/maftools.sif`
-mafExtractor 
-A program to extract all alignment blocks that contain a region in a particular sequence. 
-Useful for isolating regions of interest in large maf files.
-`https://github.com/dentearl/mafTools`
-It does change the `a=score` to 0 and adds `mafExtractor_splicedBlock=true splice_id=1_0`
+for i in *.maf ; do n=$(echo $i | cut -f 2 -d "_" ) ; echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/03.5.swapMAF.sh ${n} >> ../scripts/swap.cmds.txt ; done
+#remove the first line so no swapping of Av (no need to split it)
+
+#make sure there's 3 hours of time
+for i in {1..35} ; do sbatch --dependency=afterok:4781250 ../scripts/swap.cmds_${i}.sub ;done
 
 ```
-while read line ; do singularity exec maftools.sif mafExtractor --maf AnchorWave_output/Sb313_TdFL_anchorwave.maf --seq $(echo $line | cut -f 1 -d " ") --start $(echo $line | cut -f 2 -d " ") --stop $(echo $line |cut -f 3 -d " ") --soft >> test.maf ; done < test.txt 
-```
-*This gives me two regions instead of 1*
-```
-ml singularity
-singularity exec --bind $PWD maftools.sif mafExtractor\
-	--maf maf \
-	--seq \
-	--start \
-	--stop \
-	 > split.maf
-```
 
-`/work/LAS/mhufford-lab/maffilter`
-`https://jydu.github.io/maffilter/Manual/SelectChr.html#SelectChr`
-maffilter
-*This has no way of writing the filtered output as a file? Where does the output even goooo???*
-```
-#Change the seqnames to include the genome names
-sed -i "s/Chr/Sb313.Chr/g" Sb313_TdFL_tabs.maf
-sed -i "s/chr/TdFL.chr/g" Sb313_TdFL_tabs.maf
-sed -i "s/scaf_B/TdFL.scaf_B/g" Sb313_TdFL_tabs.maf
+#Split MAF (by parsing coordinates?)
 
-/work/LAS/mhufford-lab/maffilter param=maffilter.optionfile
-
-maf.filter=SelectChr(ref_species=species1, chromosome=chr1)
-ExtractFeature(ref_species=TdFL, feature.file=parsing_coordinates/uniq.zmB73vsTdFL.bin1.bed, feature.format=BedGraph)
-#Also above doesn't work because bedGraph != bed
-```
-
-*Manual Options*
-
-```
-MAF=$1
-genome=$2
-
-grep -w "chr" $MAF | cut -f 2-5 -d " " > temp.coords
-
-#awk -v OFS='\t' '$4 ~ /+/ {print $1, $2, $2+$3}' temp.coords >> temp.bed #positive strand
-#awk -v OFS='\t' '$4 ~ /-/ {print $1, $2-$3, $2}' temp.coords >> temp.bed #negative strand
-
-awk -v OFS='\t' '{print $1, $2, $2+$3, $4}' temp.coords >> temp.bed #incase strand is already accounted for in MAF coordinates
-
-bedtools intersect temp.bed bin1.parsing.bed > temp.bin1.bed
-bedtools intersect temp.bed bin2.parsing.bed > temp.bin2.bed
-
-awk -v OFS='\t' '{print "s", $1,$2,$3-$2,$4}' temp.bin1.bed > temp.bin1.coords
-awk -v OFS='\t' '{print "s", $1,$2,$3-$2,$4}' temp.bin2.bed > temp.bin2.coords
-
-grep -B2 -A1 -w -f temp.bin1.coords $MAF >> ${genome}.bin1.MAF
-grep -B2 -A1 -w -f temp.bin2.coords $MAF >> ${genome}.bin2.MAF
-```
-Testing:
-```
-grep "chr" AnchorWave_output/Sb313_TdFL_anchorwave.maf | cut -f 2-5 > temp.coords
-
-awk '$4 ~ /-/ {print $2-$3}' temp.coords #negative numbers indicate that maf has already taken strandedness into account?
-
-awk -v OFS='\t' '{print $1, $2, $2+$3, $4}' temp.coords >> temp.bed #incase strand is already accounted for in MAF coordinates
-
-ml bedtools2
-bedtools intersect -a temp.bed -b parsing_coordinates/uniq.zmB73vsTdFL.bin1.bed > temp.bin1.bed
-
-#looks like there's duplicates from the intersect:
-grep "chr2    139405908       140111349" temp.bed 
-grep "chr2    139405908       140111349" temp.bin1.bed 
-
-sort temp.bin1.bed | uniq > uniq.temp.bin1.bed
-
-bedtools intersect -a temp.bed -b parsing_coordinates/uniq.zmB73vsTdFL.bin2.bed > temp.bin2.bed
-sort temp.bin2.bed | uniq > uniq.temp.bin2.bed
-
-#check that they're exclusive:
-bedtools intersect -wa -wb -a uniq.temp.bin1.bed -b uniq.temp.bin2.bed
-
-bedtools intersect -wa -a uniq.temp.bin1.bed -b uniq.temp.bin2.bed > bin1.dups.bed
-bedtools intersect -wb -a uniq.temp.bin1.bed -b uniq.temp.bin2.bed > bin2.dups.bed
-
-grep -v -f bin1.dups.bed uniq.temp.bin1.bed > excl.uniq.bin1.bed
-grep -v -f bin2.dups.bed uniq.temp.bin2.bed > excl.uniq.bin2.bed
-
-awk -v OFS='\t' '{print "s",$1,$2,$3-$2,$4}' excl.uniq.bin1.bed > temp.bin1.coords
-awk -v OFS='\t' '{print "s",$1,$2,$3-$2,$4}' excl.uniq.bin2.bed > temp.bin2.coords
-
-awk -v OFS='\t' '{print $0}' AnchorWave_output/Sb313_TdFL_anchorwave.maf > Sb313_TdFL_tabs.maf
-
-#for manual inspection: awk -v OFS='\t' -v c="chr10" -v s="17816503" "'$2 == c && $3 == s {print g; print f; print $1,$2,$3,$4,$5; printf "\n"} {g=f} {f=$2}' Sb313_TdFL_tabs.maf 
-#awk -v OFS='\t' '$2 == "chr10" && $3 == 17816503 {print g; print f; print $1,$2,$3,$4,$5; printf "\n"} {g=f} {f=$2}' AnchorWave_output/Sb313_TdFL_anchorwave.maf
-
-awk -v OFS='\t' '$2 == "chr10" && $3 == 17816503 {print g; print f; print $0; printf "\n"} {g=f} {f=$0}' Sb313_TdFL_tabs.maf 
-```
-*Can't loop through Awk*
 *NOTE: There is no chr6 in the bin coordinates for TdFL*
 
 *kentutils*
 `/ptmp/arnstrm/kentutils.sif`
 
 see `split_and_filter_maf_files_for_Sam.txt`
-
+First need to swap mafs before doing this
 ```mafsplit.1.sh
 #!/bin/bash
 ml singularity
@@ -1644,17 +1755,22 @@ genome=$1
 singularity exec --bind $PWD /ptmp/arnstrm/kentutils.sif mafSplit -byTarget dummy.bed -useFullSequenceName swap_${genome}/ Sb313_${genome}_anchorwave.swap.maf
 
 ###
-for i in TdFL ZdGigi ZvTIL01 ZmB73 ; do echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/mafsplit.1.sh $i >> ../scripts/mafsplit.cmds.txt ; done
+for i in *swap.maf ; do 
+	n=$(echo $i | cut -f 2 -d "_")
+	echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/mafsplit.1.sh $n >> ../scripts/mafsplit.cmds.txt 
+done
+
 cd ../scripts
 python makeSLURM.py 1 mafsplit.cmds.txt
 cd -
 sbatch ../scripts/mafsplit.cmds_0.sub
-for i in {1..3} ; do sbatch --dependency=afterok:4749635 ../scripts/mafsplit.cmds_${i}.sub ; done
+for i in {1..35} ; do sbatch --dependency=afterok:4781359 ../scripts/mafsplit.cmds_${i}.sub ; done
 
 ###
 
 for f in */*.maf ;do fp=$(dirname "$f"); fl=$(basename "$f"); mv "$fp/$fl" "$fp"_"$fl"; done
 rm *scaf*
+rm *alt-ctg*
 ```
 
 ```mafsplit.2.sh
@@ -1685,9 +1801,9 @@ done
 
 Manually:
 ```
-mkdir zm-sb_split_mafs
-mv *chr*_Chr*.maf zm-sb_split_mafs
-cd zm-sb_split_mafs
+mkdir tripsacinae-sb_split_mafs
+mv *chr*_Chr*.maf tripsacinae-sb_split_mafs
+cd tripsacinae-sb_split_mafs
 ```
 
 Next, sort maf files, then remove overlapping blocks that cause Zack's gvcf converter to fail 
@@ -1715,52 +1831,160 @@ done
 ```
 merge split mafs into bins for chr10 test:
 ```
-cat TdFL_chr13_Chr10_sorted_filtered.maf > TdFL_Chr10.bin2.maf
-cat TdFL_chr10_Chr10_sorted_filtered.maf > TdFL_Chr10.bin1.maf
-tail -n +2 TdFL_chr4_Chr10_sorted_filtered.maf >> TdFL_Chr10.bin1.maf
+mkdir test_mafs/
+cat TdFL_chr13_Chr10_sorted_filtered.maf > test_mafs/TdFL_Chr10.bin2.maf
+cat TdFL_chr10_Chr10_sorted_filtered.maf > test_mafs/TdFL_Chr10.bin1.maf
+tail -n +2 TdFL_chr4_Chr10_sorted_filtered.maf >> test_mafs/TdFL_Chr10.bin1.maf
 
-cat ZdGigi_chr5_Chr10_sorted_filtered.maf  > ZdGigi_Chr10.bin1.maf
-tail -n +2 ZdGigi_chr9_Chr10_sorted_filtered.maf  >> ZdGigi_Chr10.bin1.maf
-cat ZdGigi_chr6_Chr10_sorted_filtered.maf  > ZdGigi_Chr10.bin2.maf
+cat ZdGigi_chr5_Chr10_sorted_filtered.maf  > test_mafs/ZdGigi_Chr10.bin1.maf
+tail -n +2 ZdGigi_chr9_Chr10_sorted_filtered.maf  >> test_mafs/ZdGigi_Chr10.bin1.maf
+cat ZdGigi_chr6_Chr10_sorted_filtered.maf  > test_mafs/ZdGigi_Chr10.bin2.maf
 
-cat ZvTIL01_chr5_Chr10_sorted_filtered.maf  > ZvTIL01_Chr10.bin1.maf
-tail -n +2 ZvTIL01_chr9_Chr10_sorted_filtered.maf  >> ZvTIL01_Chr10.bin1.maf
-cat ZvTIL01_chr6_Chr10_sorted_filtered.maf  > ZvTIL01_Chr10.bin2.maf
+cat ZvTIL01_chr5_Chr10_sorted_filtered.maf  > test_mafs/ZvTIL01_Chr10.bin1.maf
+tail -n +2 ZvTIL01_chr9_Chr10_sorted_filtered.maf  >> test_mafs/ZvTIL01_Chr10.bin1.maf
+cat ZvTIL01_chr6_Chr10_sorted_filtered.maf  > test_mafs/ZvTIL01_Chr10.bin2.maf
 
-cat ZmB73_chr5_Chr10_sorted_filtered.maf  > ZmB73_Chr10.bin1.maf
-tail -n +2 ZmB73_chr9_Chr10_sorted_filtered.maf  >> ZmB73_Chr10.bin1.maf
-cat ZmB73_chr6_Chr10_sorted_filtered.maf  > ZmB73_Chr10.bin2.maf
+cat ZmB73_chr5_Chr10_sorted_filtered.maf  > test_mafs/ZmB73_Chr10.bin1.maf
+tail -n +2 ZmB73_chr9_Chr10_sorted_filtered.maf  >> test_mafs/ZmB73_Chr10.bin1.maf
+cat ZmB73_chr6_Chr10_sorted_filtered.maf  > test_mafs/ZmB73_Chr10.bin2.maf
 
 wc -l *Chr10_sorted_filtered.maf #668
 wc -l *Chr10.bin*maf #664 (4 less because removing header line of 1 maf file)
 ```
+Merge split mafs into bins for whole data set by Sb313 chromosome
+```
+#make each bin file per query genome first (by Sb313 chromosome)
 
-Try converting to GVCF and see if it works
+##generate unique list of query chromosome names per bin
+#Using the results.v2 files
+for i in zmB73vs*_results.tsv; do
+	n=$(echo $i | sed 's/zmB73vs//g' | cut -f 1 -d "_")
+	cut -f 1,7,9 $i | sort | uniq >> ${n}.bins.txt
+done
+
+##concatenate
+#Do a while loop that uses to the two fields
+slurm_03.1.concatMAFtoBins.sh
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -n 36
+#SBATCH --mem=350GB
+#SBATCH -t 3:00:00
+#SBATCH -J featureCounts.
+#SBATCH -o featureCounts.o%j
+#SBATCH -e featureCounts.e%j
+#SBATCH --mail-user=snodgras@iastate.edu
+#SBATCH --mail-type=end
+#SBATCH --mail-type=fail
+
+for g in TdFL ZdGigi ZdMomo ZhRIMHU001 ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ZnPI615697 ZvTIL01 ZvTIL11 ZxTIL18 ZxTIL25 ; do 
+	while read -r query sb bin ; do 
+		if [ -f "$g"_"$sb"."$bin".maf ] ; then 
+			tail -n +2 "$g"_"$query"_"$sb"_sorted_filtered.maf >> "$g"_"$sb"."$bin".maf
+			else
+			cat "$g"_"$query"_"$sb"_sorted_filtered.maf > "$g"_"$sb"."$bin".maf
+		fi
+	done < /work/LAS/mhufford-lab/snodgras/Fractionation/parsing_coordinates/${g}.bins.txt
+done
+
+###
+#problem, the bin included the return character into the name
+
+for g in TdFL ZdGigi ZdMomo ZhRIMHU001 ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ZnPI615697 ZvTIL01 ZvTIL11 ZxTIL18 ZxTIL25 ; do 
+for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+	mv ${g}_${i}.bin1*.maf ${g}_${i}.bin1.maf
+	mv ${g}_${i}.bin2*.maf ${g}_${i}.bin2.maf
+done
+done
+
+
+##double check that this works before launching on all
+md5sum ZdGigi_Chr10.bin*maf
+md5sum test_mafs/ZdGigi_Chr10.bin*maf
+
+#Didn't make the TdFL and had an issue with some of the renaming of the Oh7b files
+#ZmOh7b_Chr01.bin2 ZmOh7b_Chr07.bin1.maf
+
+rm ZmOh7b_Chr01.bin2*maf ZmOh7b_Chr07.bin1*maf
+
+cat ZmOh7b_chr5_Chr01_sorted_filtered.maf > ZmOh7b_Chr01.bin2.maf
+tail -n +2 ZmOh7b_chr9_Chr01_sorted_filtered.maf >> ZmOh7b_Chr01.bin2.maf
+
+cat ZmOh7b_chr1_Chr07_sorted_filtered.maf > ZmOh7b_Chr07.bin1.maf
+tail -n +2 ZmOh7b_chr10_Chr07_sorted_filtered.maf >> ZmOh7b_Chr07.bin1.maf
+tail -n +2 ZmOh7b_chr6_Chr07_sorted_filtered.maf >> ZmOh7b_Chr07.bin1.maf
+tail -n +2 ZmOh7b_chr9_Chr07_sorted_filtered.maf >> ZmOh7b_Chr07.bin1.maf
+
+```
+
+Converting to GVCF and see if it works (use the `test_mafs`)
+Note to self: 12/12 I changed --fillGaps from false to true
+It has since been switched back to --fillGaps false
 ```
 for i in *bin*.maf ; do 
-	echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/04.splitmaf2gvcf.sh /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.fasta ${i} >> ../../scripts/splitmaf2gvcf.cmds.txt
+	echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/04.splitmaf2gvcf.sh /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.fasta ${i} >> splitmaf2gvcf.cmds.txt
 done
-cd ../../scripts/
-python makeSLURM.py 1 splitmaf2gvcf.cmds.txt
-cd - 
-#test before running all
-sbatch ../../scripts/splitmaf2gvcf.cmds_0.sub 
+python ../../../scripts/makeSLURM.py 1 splitmaf2gvcf.cmds.txt
 
-for i in {1..7} ; do sbatch ../../scripts/splitmaf2gvcf.cmds_${i}.sub ; done
+#test before running all
+sbatch splitmaf2gvcf.cmds_0.sub 
+
+for i in {1..7} ; do sbatch splitmaf2gvcf.cmds_${i}.sub ; done
 ```
+For the full set of genomes
+```
+for i in *bin*.maf ; do 
+	echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/04.splitmaf2gvcf.sh /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.fasta ${i} >> splitmaf2gvcf.cmds.txt
+done
+python ../../scripts/makeSLURM.py 1 splitmaf2gvcf.cmds.txt
+
+sbatch splitmaf2gvcf.cmds_0.sub 
+
+for i in {1..699} ; do sbatch splitmaf2gvcf.cmds_${i}.sub ;done
+```
+
 Trimming the GVCFs
+(use the `test_mafs` first)
 ```
 for i in *gvcf.gz ; do 
-echo module load samtools \; module load gatk \; gatk LeftAlignAndTrimVariants -O trimmed_${i} -V ${i} -R /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.clean.fasta --max-indel-length 9101263 &> gf_stdout.txt >> ../../scripts/splitmaf.trimGVCF.cmds.txt
+echo module load samtools \; module load gatk \; gatk LeftAlignAndTrimVariants -O trimmed_${i} -V ${i} -R /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.clean.fasta --max-indel-length 9101263 &> gf_stdout.txt >> splitmaf.trimGVCF.cmds.txt
 done
-cd -
+cp ../../../scripts/makeSLURM.py .
 #edit makeSLURM.py to be only 1 hour of wall time
 python makeSLURM.py 1 splitmaf.trimGVCF.cmds.txt
-cd -
-sbatch ../../scripts/splitmaf.trimGVCF.cmds_0.sub
-for i in {1..7} ; do sbatch --dependency=afterok: ../../scripts/splitmaf.trimGVCF.cmds_${i}.sub ;done
+
+for i in *gvcf.gz ; do echo $i >> job.key.tmp ; done
+awk -v OFS='\t' '{print $0,NR-1}' job.key.tmp > job.key
+rm job.key.tmp
+
+while read -r id job ; do 
+	sed -i "s/splitmaf/${id}/g" splitmaf.trimGVCF.cmds_"$job".sub
+done < job.key
+
+sbatch splitmaf.trimGVCF.cmds_0.sub
+for i in {1..7} ; do sbatch --dependency=afterok:4858025 splitmaf.trimGVCF.cmds_${i}.sub ;done
 ```
+
+Running on the full set of genomes
+```
+for i in *gvcf.gz ; do 
+echo module load samtools \; module load gatk \; gatk LeftAlignAndTrimVariants -O trimmed_${i} -V ${i} -R /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.clean.fasta --max-indel-length 9101263 &> gf_stdout.txt >> splitmaf.trimGVCF.cmds.txt
+done
+python ../../scripts/makeSLURM.py 1 splitmaf.trimGVCF.cmds.txt
+
+for i in *gvcf.gz ; do echo $i >> job.key.tmp ; done
+awk -v OFS='\t' '{print $0,NR-1}' job.key.tmp > job.key
+rm job.key.tmp
+
+while read -r id job ; do 
+	sed -i "s/splitmaf/${id}/g" splitmaf.trimGVCF.cmds_"$job".sub
+done < job.key
+
+for i in splitmaf.trimGVCF.cmds*sub ; do sbatch $i ; done
+```
+
 Then manually remove the too large indels
+(use the `test_mafs` first)
 ```slurm_04.5.removelargeindels.sh
 #!/bin/bash
 #SBATCH --nodes=1 
@@ -1773,29 +1997,11 @@ Then manually remove the too large indels
 #SBATCH --mail-type=fail
 
 ml vcftools
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_0.e4756881 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_TdFL_Chr10.bin1.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_TdFL_Chr10.bin1.gvcf.gz
 
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_1.e4756882 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_TdFL_Chr10.bin2.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_TdFL_Chr10.bin2.gvcf.gz
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_2.e4756883 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZdGigi_Chr10.bin1.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZdGigi_Chr10.bin1.gvcf.gz
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_3.e4756884 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZdGigi_Chr10.bin2.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZdGigi_Chr10.bin2.gvcf.gz
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_4.e4756885 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZmB73_Chr10.bin1.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZmB73_Chr10.bin1.gvcf.gz
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_5.e4756886 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZmB73_Chr10.bin2.gvcf.gz  --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZmB73_Chr10.bin2.gvcf.gz 
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_6.e4756887 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZvTIL01_Chr10.bin1.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZvTIL01_Chr10.bin1.gvcf.gz
-
-awk '$0 ~ /Indel is too long/  { print }' splitmaf.trimGVCF.cmds_7.e4756888 |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
-vcftools --gzvcf trimmed_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz --exclude-positions positions.txt --recode --recode-INFO-all --out ready_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz 
+for i in Sb313*.gvcf.gz ; do 
+	awk '$0 ~ /Indel is too long/  { print }' ${i}.trimGVCF.cmds_*.e* |cut -f 1 -d ";" |awk '{print $NF}' |sed 's/:/\t/g' > positions.txt
+	vcftools --gzvcf trimmed_${i} --exclude-positions positions.txt --recode --recode-INFO-all --out ready_${i}
+done
 
 ml gatk
 for i in ready*recode.vcf ; do gatk IndexFeatureFile -F $i ;done
@@ -1803,8 +2009,93 @@ for i in ready*recode.vcf ; do gatk IndexFeatureFile -F $i ;done
 ```
 output is like: `ready_Sb313_TdFL_Chr10.bin1.gvcf.gz.recode.vcf`
 
+Run on the full set of genomes
+_Same slurm script as above, just edit the time to be 24 hours (just in case)_
+
 convert to vcf
+Let's try keeping each bin separate:
+(use the `test_mafs` first)
+
+*Split the reference genome into separate chromosome fastas*
+In this case Sb313
+```
+awk '/^>/ {printf("\n%s\n",$0);next; } { printf("%s",$0);}  END {printf("\n");}' < Sb313.clean.fasta > Sb313.linear.clean.fasta
+#manually remove empty first line
+grep -A1 "^>01" Sb313.linear.clean.fasta > Sb313.chr1.fasta
+grep -A1 "^>02" Sb313.linear.clean.fasta > Sb313.chr2.fasta
+grep -A1 "^>03" Sb313.linear.clean.fasta > Sb313.chr3.fasta
+grep -A1 "^>04" Sb313.linear.clean.fasta > Sb313.chr4.fasta
+grep -A1 "^>05" Sb313.linear.clean.fasta > Sb313.chr5.fasta
+grep -A1 "^>06" Sb313.linear.clean.fasta > Sb313.chr6.fasta
+grep -A1 "^>07" Sb313.linear.clean.fasta > Sb313.chr7.fasta
+grep -A1 "^>08" Sb313.linear.clean.fasta > Sb313.chr8.fasta
+grep -A1 "^>09" Sb313.linear.clean.fasta > Sb313.chr9.fasta
+grep -A1 "^>10" Sb313.linear.clean.fasta > Sb313.chr10.fasta
+mv Sb313.chr*.fasta AnchorWave_Output/.
+```
+
 ```slurm_06.10.splitmaf.gvcf2vcf.sh
+#!/bin/bash
+#SBATCH --nodes=1 
+#SBATCH --ntasks=36 
+#SBATCH --mem=350GB 
+#SBATCH --time=12:00:00
+#SBATCH --job-name=gatk-chr10
+#SBATCH --output=nova-%x.%j.out
+#SBATCH --error=nova-%x.%j.err
+#SBATCH --mail-user=snodgras@iastate.edu
+#SBATCH --mail-type=begin
+#SBATCH --mail-type=end
+#SBATCH --mail-type=fail
+
+ml gatk
+ref=/work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.chr10.fasta
+ml samtools
+# index
+samtools faidx $ref
+# dict
+gatk CreateSequenceDictionary REFERENCE=${ref} OUTPUT=${ref%.*}.dict
+# db import
+gatk --java-options "-Xmx128g -Xms5g" GenomicsDBImport \
+-V ready_Sb313_TdFL_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZdGigi_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmB73_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZvTIL01_Chr10.bin1.gvcf.gz.recode.vcf \
+--batch-size 1 \
+--genomicsdb-workspace-path chr10.bin1_gatkDBimport \
+-L 10 \
+--genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 
+#--tmp-dir $TMPDIR
+
+# vcf output
+gatk --java-options "-Xmx50g" GenotypeGVCFs \
+-R $ref \
+-V gendb://chr10.bin1_gatkDBimport \
+--cloud-prefetch-buffer 10000 --cloud-index-prefetch-buffer 10000 --genomicsdb-max-alternate-alleles 110 --max-alternate-alleles 100 --gcs-max-retries 1000 \
+-O chr10.bin1.vcf
+
+# db import
+gatk --java-options "-Xmx128g -Xms5g" GenomicsDBImport \
+-V ready_Sb313_TdFL_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZdGigi_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmB73_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz.recode.vcf \
+--batch-size 1 \
+--genomicsdb-workspace-path chr10.bin2_gatkDBimport \
+-L 10 \
+--genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 
+#--tmp-dir $TMPDIR
+
+# vcf output
+gatk --java-options "-Xmx50g" GenotypeGVCFs \
+-R $ref \
+-V gendb://chr10.bin2_gatkDBimport \
+--cloud-prefetch-buffer 10000 --cloud-index-prefetch-buffer 10000 --genomicsdb-max-alternate-alleles 110 --max-alternate-alleles 100 --gcs-max-retries 1000 \
+-O chr10.bin2.vcf
+```
+
+*To run on the full set of genomes*
+```slurm_06.10.splitmaf.bin1.gvcf2vcf.sh
 #!/bin/bash
 #SBATCH --nodes=1 
 #SBATCH --ntasks=36 
@@ -1828,15 +2119,42 @@ gatk CreateSequenceDictionary REFERENCE=${ref} OUTPUT=${ref%.*}.dict
 # db import
 gatk --java-options "-Xmx128g -Xms5g" GenomicsDBImport \
 -V ready_Sb313_TdFL_Chr10.bin1.gvcf.gz.recode.vcf \
--V ready_Sb313_TdFL_Chr10.bin2.gvcf.gz.recode.vcf \
 -V ready_Sb313_ZdGigi_Chr10.bin1.gvcf.gz.recode.vcf \
--V ready_Sb313_ZdGigi_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZdMomo_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZhRIMHU001_Chr10.bin1.gvcf.gz.recode.vcf \
 -V ready_Sb313_ZmB73_Chr10.bin1.gvcf.gz.recode.vcf \
--V ready_Sb313_ZmB73_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmB97_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML103_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML228_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML247_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML277_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML322_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML333_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML52_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML69_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmHP301_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmIL14H_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKi11_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKi3_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKy21_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmM162W_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmM37W_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmMo18W_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmMS71_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmNC350_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmNC358_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmOh43_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmOh7b_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmP39_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmTx303_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmTzi8_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZnPI615697_Chr10.bin1.gvcf.gz.recode.vcf \
 -V ready_Sb313_ZvTIL01_Chr10.bin1.gvcf.gz.recode.vcf \
--V ready_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZvTIL11_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZxTIL18_Chr10.bin1.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZxTIL25_Chr10.bin1.gvcf.gz.recode.vcf \
 --batch-size 1 \
---genomicsdb-workspace-path chr1_gatkDBimport \
+--genomicsdb-workspace-path chr10.bin1_gatkDBimport \
 -L 10 \
 --genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 
 #--tmp-dir $TMPDIR
@@ -1844,36 +2162,116 @@ gatk --java-options "-Xmx128g -Xms5g" GenomicsDBImport \
 # vcf output
 gatk --java-options "-Xmx50g" GenotypeGVCFs \
 -R $ref \
--V gendb://chr10_gatkDBimport \
+-V gendb://chr10.bin1_gatkDBimport \
 --cloud-prefetch-buffer 10000 --cloud-index-prefetch-buffer 10000 --genomicsdb-max-alternate-alleles 110 --max-alternate-alleles 100 --gcs-max-retries 1000 \
--O chr10.vcf
+-O chr10.bin1.vcf
 ```
-prep reference annotation to be included as a filter for vcf
-```slurm_07.00.splitmaf.genebed.sh
+splitting it into 2 separate scripts so they won't time out
+```slurm_06.10.splitmaf.bin1.gvcf2vcf.sh
 #!/bin/bash
 #SBATCH --nodes=1 
 #SBATCH --ntasks=36 
 #SBATCH --mem=350GB 
-#SBATCH --time=1:00:00
+#SBATCH --time=96:00:00
+#SBATCH --job-name=gatk-chr10
+#SBATCH --output=nova-%x.%j.out
+#SBATCH --error=nova-%x.%j.err
 #SBATCH --mail-user=snodgras@iastate.edu
 #SBATCH --mail-type=begin
 #SBATCH --mail-type=end
 #SBATCH --mail-type=fail
 
-ml bedops
-bedops gff2bed < /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 > /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.gene.bed
+ml gatk
+ref=/work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.chr10.fasta
+ml samtools
+# index
+#samtools faidx $ref
+# dict
+#gatk CreateSequenceDictionary REFERENCE=${ref} OUTPUT=${ref%.*}.dict #would recreate the one being made by the bin1 script
+
+# db import
+gatk --java-options "-Xmx128g -Xms5g" GenomicsDBImport \
+-V ready_Sb313_TdFL_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZdGigi_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZdMomo_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZhRIMHU001_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmB73_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmB97_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML103_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML228_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML247_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML277_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML322_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML333_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML52_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmCML69_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmHP301_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmIL14H_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKi11_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKi3_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmKy21_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmM162W_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmM37W_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmMo18W_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmMS71_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmNC350_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmNC358_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmOh43_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmOh7b_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmP39_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmTx303_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZmTzi8_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZnPI615697_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZvTIL01_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZvTIL11_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZxTIL18_Chr10.bin2.gvcf.gz.recode.vcf \
+-V ready_Sb313_ZxTIL25_Chr10.bin2.gvcf.gz.recode.vcf \
+--batch-size 1 \
+--genomicsdb-workspace-path chr10.bin2_gatkDBimport \
+-L 10 \
+--genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 
+#--tmp-dir $TMPDIR
+
+# vcf output
+gatk --java-options "-Xmx50g" GenotypeGVCFs \
+-R $ref \
+-V gendb://chr10.bin2_gatkDBimport \
+--cloud-prefetch-buffer 10000 --cloud-index-prefetch-buffer 10000 --genomicsdb-max-alternate-alleles 110 --max-alternate-alleles 100 --gcs-max-retries 1000 \
+-O chr10.bin2.vcf
 ```
-^^^ Didn't work so I'll try manually making a bed file
+Make the other chromosome slurm jobs based off the chr10 script
+```
+for i in {1..9} ; do 
+	sed "s/chr10/chr${i}/g" slurm_06.10.splitmaf.bin1.gvcf2vcf.sh > slurm_06.${i}.splitmaf.bin1.gvcf2vcf.sh
+	sed "s/chr10/chr${i}/g" slurm_06.10.splitmaf.bin2.gvcf2vcf.sh > slurm_06.${i}.splitmaf.bin2.gvcf2vcf.sh
+	sed -i "s/Chr10/Chr0${i}/g" slurm_06.${i}.splitmaf.bin1.gvcf2vcf.sh
+	sed -i "s/Chr10/Chr0${i}/g" slurm_06.${i}.splitmaf.bin2.gvcf2vcf.sh
+done
+
+for i in {1..9} ; do 
+	sed -i "s/-L 10/-L 0${i}/g" slurm_06.${i}.splitmaf.bin1.gvcf2vcf.sh
+	sed -i "s/-L 10/-L 0${i}/g" slurm_06.${i}.splitmaf.bin2.gvcf2vcf.sh
+done
+``` 
+All will finish in 24 hours except chr1
+Giving it 48 hours
+
+prep reference annotation to be included as a filter for vcf
+
 ```
 #note there are no exon features in the Sb313 gff3
 
 awk -v OFS='\t' '$3 == "CDS" && $7 == "+" {print $1,$4-1,$5,$9,$7}; $3 == "CDS" && $7 == "-" {print $1,$4,$5+1,$9,$7}' Sbicolor_313_v3.1.gene.gff3 > Sb313.CDS.bed
 sed -i "s/Chr//g" Sb313.CDS.bed
 
-awk -v OFS='\t' '$3 == "gene" && $7 == "+" {print $1,$4-1,$5,$9,$7}; $3 == "CDS" && $7 == "-" {print $1,$4,$5+1,$9,$7}' Sbicolor_313_v3.1.gene.gff3 > Sb313.gene.bed
+awk -v OFS='\t' '$3 == "gene" && $7 == "+" {print $1,$4-1,$5,$9,$7}; $3 == "gene" && $7 == "-" {print $1,$4,$5+1,$9,$7}' Sbicolor_313_v3.1.gene.gff3 > Sb313.gene.bed
 sed -i "s/Chr//g" Sb313.gene.bed
 ```
+_Note: since we're using a limited reference set of homoeologs for the CDS_
+I wrote the `ref_Sb313.cds` object from the R script `trial-fractionation-calling.R` to `/work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed`
 then subset out the indels
+
+Run on test set first
 ```slurm_07.10.splitmaf.subsetvcf.sh
 #!/bin/bash
 #SBATCH --nodes=1 
@@ -1885,11 +2283,27 @@ then subset out the indels
 #SBATCH --mail-type=end
 #SBATCH --mail-type=fail
 ml gatk
-#gatk SelectVariants -V chr10.vcf -O chr10.indelonly.vcf --select-type-to-include INDEL
-gatk SelectVariants -V chr10.vcf -O chr10.CDSonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.CDS.bed 
-gatk SelectVariants -V chr10.vcf -O chr10.geneonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.gene.bed
+
+#gatk SelectVariants -V chr10.bin1.vcf -O chr10.bin1.CDSonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.CDS.bed 
+#gatk SelectVariants -V chr10.bin2.vcf -O chr10.bin2.CDSonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.CDS.bed 
+
+#gatk SelectVariants -V chr10.bin1.vcf -O chr10.bin1.CDSonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed
+#gatk SelectVariants -V chr10.bin2.vcf -O chr10.bin2.CDSonly.indelonly.vcf --select-type-to-include INDEL -L /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed 
+
+gatk SelectVariants -V chr10.bin1.vcf -O chr10.bin1.indelonly.vcf --select-type-to-include INDEL 
+gatk SelectVariants -V chr10.bin2.vcf -O chr10.bin2.indelonly.vcf --select-type-to-include INDEL 
+
 ```
-then convert to a table? Or some other way of intersecting with Sb exon coordinates? 
+To run on the full set
+keep the time requested at 4 hours for now (change if need more time) [only took 2.5-8 minutes per job]
+
+_Don't filter by ref coordinates in gatk_
+Will need deletion lengths to find overlap with the ref cds
+```
+for i in {1..9} ; do cp slurm_07.10.splitmaf.subsetvcf.sh slurm_07.${i}.splitmaf.subsetvcf.sh ; sed -i "s/chr10/chr${i}/g" slurm_07.${i}.splitmaf.subsetvcf.sh ; done
+```
+
+Convert to a table (run on test set first)
 ```slurm_08.10.splitmaf.vcftable.sh
 #!/bin/bash
 #SBATCH --nodes=1 
@@ -1900,69 +2314,873 @@ then convert to a table? Or some other way of intersecting with Sb exon coordina
 #SBATCH --mail-type=begin
 #SBATCH --mail-type=end
 #SBATCH --mail-type=fail
-#ml gatk
-#gatk VariantsToTable -V chr10.indelonly.vcf -O chr10.indelonly.table -F CHROM -F POS -F TYPE -F NCALLED -GF GT -GF GQ
-#gatk VariantsToTable -V chr10.CDSonly.indelonly.vcf -O chr10.CDS.only.indelonly.table -F CHROM -F POS -F TYPE -F NCALLED -GF GT -GF GQ
+
 ml bcftools
 bcftools annotate -x INFO,^FORMAT/GT chr10.CDSonly.indelonly.vcf  > chr10.CDSonly.indelonly_reformted.vcf
 bcftools annotate -x INFO,^FORMAT/GT chr10.geneonly.indelonly.vcf  > chr10.geneonly.indelonly_reformatted.vcf
 
-```
-Make a key for parsing in R
-```
-awk -v OFS='\t' '$1 == 10 {print $1,$2,$4,$5}' chr10.CDSonly.indelonly.vcf > chr10.CDSonly.indelonly.refaltKey.tsv
-```
-Use `SNPeff` to add annotations
-```
-java -Xmx8g -jar /work/LAS/mhufford-lab/snodgras/Fractionation/snpEff/snpEff.jar \
--interval /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.CDS.bed \
-chr10.CDSonly.indelonly_reformted.vcf > chr10.CDSonly.indelonly.refmt.ann.vcf
+bcftools annotate -x INFO,^FORMAT/GT chr10.bin1.CDSonly.indelonly.vcf  > chr10.bin1.CDSonly.indelonly_reformatted.vcf
+bcftools annotate -x INFO,^FORMAT/GT chr10.bin2.CDSonly.indelonly.vcf  > chr10.bin2.CDSonly.indelonly_reformatted.vcf
 
-ml snpeff
-snpEff -interval /work/LAS/mhufford-lab/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sb313.CDS.bed \
-chr10.CDSonly.indelonly_reformted.vcf > chr10.CDSonly.indelonly.refmt.ann.vcf
+bcftools annotate -x INFO,^FORMAT/GT chr10.bin1.indelonly.vcf  > chr10.bin1.indelonly_reformatted.vcf
+bcftools annotate -x INFO,^FORMAT/GT chr10.bin2.indelonly.vcf  > chr10.bin2.indelonly_reformatted.vcf
+
+```
+For the full set:
+Can reduce the time to 1 hour (took a couple seconds to a minute to run)
+_make sure to use the `indelonly` command_
+```
+for i in {1..9} ; do cp slurm_08.10.splitmaf.vcftable.sh slurm_08.${i}.splitmaf.vcftable.sh ; sed -i "s/chr10/chr${i}/g" slurm_08.${i}.splitmaf.vcftable.sh ; done
 ```
 
-For using Rstudio on nova:
-```
-grep -v "^##" chr10.geneonly.indelonly_reformatted.vcf > chr10.geneonly.indelonly_reformatted.tsv
- ssh -N -L 8787:nova21-14:43993 snodgras@nova.its.iastate.edu
-```
+To be able to load the vcf into R, must remove the header information
+It will also speed things up to filter for deletions that cover ref exons
+```slurm_08.00.gvcfDelIntersect.sh
+#finds deletions genotyped in the gvcfs
+#Ignores if there is a deletion but only N as the ALT
+#Makes the size of the deletion the ref allele - the alt allele lengths
 
-
-*Split GVCF:*
-```
-for i in *.swap.maf; do
-	n=$(echo $i | cut -f 2 -d "_") 
-	echo bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/04.maf2gvcf.sh /work/LAS/mhufford-lab/snodgras/Fractionation/Sb313.fasta ${n} >> ../scripts/maf2gvcf.cmds.txt
+for i in Sb313*.gvcf.gz ; do 
+zcat $i | grep -v "#" - | tr ';' '\t' | \
+	awk -v OFS="\t" '{print $1,$2,$4,$5,$11,$13}' |
+	sed "s/<NON_REF>/N/g" | \
+	awk -v OFS="\t" '{split($4,a,/,/); for(i = 1; i <= length(a); ++i) if(a[i] != "N" && length(a[i]) < length($3)) print $1,$2,$3,$4,a[i],length($3)-length(a[i]),$5,$6 }' |
+	awk -v OFS="\t" '{if($7 ~/+/)print $1,$2,$2+$6,$3,$4,$5,$6,$7,$8;else if ($7 ~/-/)print $1,$2-$6,$2,$3,$4,$5,$6,$7,$8}' | \
+	awk -v OFS='\t' '{if($2 < 1) print $1,1,$3,$4,$5; else print $0}' | \
+	sed "s/ASM_Strand=//g" | \
+	tr ":" "\t" | awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$8,$6,$7,$9}' > ${i%.gvcf.gz}.dels.bed
 done
-cd ../scripts/
-#edit makeSLURM.py to be only 1 hour of wall time
-python makeSLURM.py 1 maf2gvcf.cmds.txt
-cd -
-for i in ../scripts/maf2gvcf*.sub ; do sbatch $i ;done
+#fields are: SBChr, Sbstart, Sbstop, REF, ALT, strand, SingularALT, REF_length (AKA deletion size), genotype
+
+
+ml bedtools2
+
+#allows each deletion to intersect with the ref exon coordinates
+#see if a deletion overlaps with multiple ref exons
+#if a del allele is in gvcf, that means the genotype = 1
+for i in *.dels.bed ; do 
+	bedtools intersect -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed -b $i > ${i%.dels.bed}.refExons.deleted
+	cut -f 4 ${i%.dels.bed}.refExons.deleted | sort | uniq > ${i%.dels.bed}.refExons.deleted.IDs.txt
+done
+
+#The retained have to be done a little different because otherwise you'll get all the other chromosomes too
+for i in TdFL ZdGigi ZdMomo ZhRIMHU001 ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ZnPI615697 ZvTIL01 ZvTIL11 ZxTIL18 ZxTIL25 ; do 
+	for j in 01 02 03 04 05 06 07 08 09 10; do 
+		awk -v OFS='\t' -v cn=$(echo $j) '$1 == cn {print $0}' /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed | bedtools intersect -v -a - -b Sb313_${i}_Chr${j}.bin1.dels.bed  > Sb313_${i}_Chr${j}.bin1.refExons.retained
+		cut -f 4  Sb313_${i}_Chr${j}.bin1.refExons.retained | sort | uniq >  Sb313_${i}_Chr${j}.bin1.refExons.retained.IDs.txt
+		awk -v OFS='\t' -v cn=$(echo $j) '$1 == cn {print $0}' /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed | bedtools intersect -v -a - -b Sb313_${i}_Chr${j}.bin2.dels.bed  > Sb313_${i}_Chr${j}.bin2.refExons.retained
+		cut -f 4  Sb313_${i}_Chr${j}.bin2.refExons.retained | sort | uniq >  Sb313_${i}_Chr${j}.bin2.refExons.retained.IDs.txt
+
+	done
+done
+
+for i in TdFL ZdGigi ZdMomo ZhRIMHU001 ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ZnPI615697 ZvTIL01 ZvTIL11 ZxTIL18 ZxTIL25 ; do 
+ echo ${i}.bin1.deleted_CDS_ID > ${i}.bin1.allchr.refExons.deleted
+ echo ${i}.bin2.deleted_CDS_ID > ${i}.bin2.allchr.refExons.deleted
+ echo ${i}.bin1.retained_CDS_ID > ${i}.bin1.allchr.refExons.retained
+ echo ${i}.bin2.retained_CDS_ID > ${i}.bin2.allchr.refExons.retained
+ for j in 01 02 03 04 05 06 07 08 09 10; do 
+ 	cat Sb313_${i}_Chr${j}.bin1.refExons.deleted.IDs.txt >> ${i}.bin1.allchr.refExons.deleted
+ 	cat Sb313_${i}_Chr${j}.bin2.refExons.deleted.IDs.txt >> ${i}.bin2.allchr.refExons.deleted
+ 	cat Sb313_${i}_Chr${j}.bin1.refExons.retained.IDs.txt  >> ${i}.bin1.allchr.refExons.retained
+ 	cat Sb313_${i}_Chr${j}.bin2.refExons.retained.IDs.txt  >> ${i}.bin2.allchr.refExons.retained
+ done
+done
+#For every genome there will be genome.bin.allchr.refExons.rentention
+
+#grep ^#CHROM chr10.bin1.CDSonly.indelonly_reformatted.vcf > chr10.bin1.CDSonly.indelonly_reformatted.reducedheader.txt
+#grep -v ^# chr10.bin1.CDSonly.indelonly_reformatted.vcf >> chr10.bin1.CDSonly.indelonly_reformatted.reducedheader.txt
+#grep ^#CHROM chr10.bin2.CDSonly.indelonly_reformatted.vcf > chr10.bin2.CDSonly.indelonly_reformatted.reducedheader.txt
+#grep -v ^# chr10.bin2.CDSonly.indelonly_reformatted.vcf >> chr10.bin2.CDSonly.indelonly_reformatted.reducedheader.txt
+
+
 ```
-using `bcftools`
-```
-ml bcftools
-#bcftools view -t chr:from-to input.file > output.file
-
-bcftools view -t chr1:54368399-59657020 Sb313_TdFL_anchorwave.swap.gvcf.gz> test_TdFL.gvcf.gz
-#made a file, but didn't find any output
-
-bcftools view -t chr17:14996000-15036000 Sb313_TdFL_anchorwave.swap.gvcf.gz> test2_TdFL.gvcf.gz
-#made a file, but didn't find any output (these coordinates were taken from the MAF so it should be in the gvcf...)
-
-bcftools view Sb313_TdFL_anchorwave.swap.gvcf.gz -t chr17:14996000-15036000 > test2_TdFL.gvcf.gz
-#still didn't work
-
-bcftools view Sb313_TdFL_anchorwave.swap.gvcf.gz -t chr17 > test2_TdFL.gvcf.gz
-#still didn't work
-
+For looking at ref gene models in R
 
 ```
-#Swap coordinates of split MAF back to original
+15111 Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt
+cut -f 1 Av_Sb313_ExactMatchOnly.OverlapWithCuratedSet.txt | cut -f 1-2 -d "." | sort | uniq | wc -l 
+   12169 #Just uniq gene models?
+   
+#How to deal with isoforms:
+#keep the one with the most exons
+#if a tie, pick one at random
+#This will be easiest to do in R
+ 
+```
+```
+#To get the number of deletions
+for j in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10; do echo $j ; for i in ZmB73 ZmB97 ZmHP301 ZmIL14H ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmOh43 ZmOh7b ZmP39 ZmTx303; do wc -l Sb313_${i}_${j}.bin2.dels.bed | cut -f 1 -d " " ; done ;done
 
+#To get the sum of the deletion lengths
+for j in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; 
+do echo $j ; for i in TdFL	ZdGigi	ZdMomo	ZhRIMHU001	ZnPI615697	ZvTIL01	ZvTIL11	ZxTIL18	ZxTIL25	ZmCML103	ZmCML228	ZmCML247	ZmCML277	ZmCML322	ZmCML333	ZmCML52	ZmCML69	ZmKi11	ZmKi3	ZmNC350	ZmNC358	ZmTzi8	ZmB73	ZmB97	ZmHP301	ZmIL14H	ZmKy21	ZmM162W	ZmM37W	ZmMo18W	ZmMS71	ZmOh43	ZmOh7b	ZmP39	ZmTx303 ; 
+do awk '{sum += $8 } END {print sum}' Sb313_${i}_${j}.bin1.dels.bed ; done ; done
+
+for j in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; 
+do echo $j ; for i in TdFL	ZdGigi	ZdMomo	ZhRIMHU001	ZnPI615697	ZvTIL01	ZvTIL11	ZxTIL18	ZxTIL25	ZmCML103	ZmCML228	ZmCML247	ZmCML277	ZmCML322	ZmCML333	ZmCML52	ZmCML69	ZmKi11	ZmKi3	ZmNC350	ZmNC358	ZmTzi8	ZmB73	ZmB97	ZmHP301	ZmIL14H	ZmKy21	ZmM162W	ZmM37W	ZmMo18W	ZmMS71	ZmOh43	ZmOh7b	ZmP39	ZmTx303 ; 
+do awk '{sum += $8 } END {print sum}' Sb313_${i}_${j}.bin2.dels.bed ; done ; done
+
+#To get the sum of the bps in the GVCFs
+for j in Chr01 ; do for i in TdFL	ZdGigi	ZdMomo	ZhRIMHU001	ZnPI615697	ZvTIL01	ZvTIL11	ZxTIL18	ZxTIL25	ZmCML103	ZmCML228	ZmCML247	ZmCML277	ZmCML322	ZmCML333	ZmCML52	ZmCML69	ZmKi11	ZmKi3	ZmNC350	ZmNC358	ZmTzi8	ZmB73	ZmB97	ZmHP301	ZmIL14H	ZmKy21	ZmM162W	ZmM37W	ZmMo18W	ZmMS71	ZmOh43	ZmOh7b	ZmP39	ZmTx303 ; 
+do zcat Sb313_${i}_${j}.bin1.gvcf.gz | grep -v "^#" | awk -v OFS='\t' '{print $2,$2+length($4)}' | awk -v OFS='\t' '{sum += $2-$1} END {print sum}'
+done
+done
+```
+current job for R: 4868940
+
+```
+1. SSH tunnel from your workstation using the following command:
+
+  ssh -N -L 8787:nova21-4:42733  snodgras@nova.its.iastate.edu
+
+   and point your web browser to http://localhost:8787
+
+2. log in to RStudio Server using the following credentials:
+
+   user: snodgras
+   password: YWTwexiUwviEh146MnRu
+
+When done using RStudio Server, terminate the job by:
+
+1. Exit the RStudio Session ("power" button in the top right corner of the RStudio window)
+2. Issue the following command on the login node:
+
+      scancel -f 4913330
+```
+Double check that homoeologs that weren't called with a variant have the ref allele in the gvcf
+```
+#Use the R script to create bin1.nodels.CDS.bed and bin2.nodels.CDS.bed
+tail -n +2 bin1.nodels.CDS.bed | bedtools intersect -wb -a - -b trimmed_Sb313_TdFL_Chr10.bin1.gvcf > bin1.nodels.CDS.intersect.gvcf
+tail -n +2 bin2.nodels.CDS.bed | bedtools intersect -wb -a - -b trimmed_Sb313_TdFL_Chr10.bin2.gvcf > bin2.nodels.CDS.intersect.gvcf
+
+tail -n +2 bin1.nodels.CDS.bed | bedtools intersect -wb -a - -b chr10.bin1.vcf > bin1.nodels.CDS.intersect.vcf
+
+tail -n +2  bin1.nodels.CDS.bed > bin1.nodels.noheader.CDS.bed
+ml gatk
+gatk SelectVariants -V chr10.bin1.vcf -O test.chr10.bin1.indelonly.vcf -select-type-to-include INDEL -L bin1.nodels.noheader.CDS.bed
+#There actually were genotyped deletions in there...
+#So I'm re-running the vcf select variants step and omitting the -L command
+#Then will rerun through the R script and see how that changes things
+#It didn't
+
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed  -b test.chr10.bin1.indelonly.vcf > test.chr10.bin1.intersect.txt
+#column 12 is the REF allele column
+
+awk -v OFS='\t' '{print $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$13,$14,$15,$16,$17,$18,$19,$20,$21}' test.chr10.bin1.intersect.txt | head
+
+awk -v OFS='\t' '{print $1,$2,$3,$6,$8,$9,$10,$17,$18,$19,$20,$21 }' test.chr10.bin1.intersect.txt | head
+#See that the intersect is working
+cut -f 1-3 bin1.nodels.noheader.CDS.bed | bedtools intersect -wb -a - -b test.chr10.bin1.indelonly.vcf > test.chr10.bin1.intersect.txt
+##IT wasn't working
+
+while read line ; do
+	chr=$(echo $line | cut -f 1 -d " "); 
+	start=$(echo $line | cut -f 2 -d " " ); 
+	stop=$(echo $line | cut -f 3 -d " ") ; 
+	grep -v "^#" test.chr10.bin1.indelonly.vcf | awk -v OFS='\t' -v c="$chr" -v s="$start" -v e="$stop" '$1 == $c && $2 >= $s && $2 <= $e {print $0}' - ; 
+done < bin1.nodels.noheader.CDS.bed > test.bin1.Chr10.manual.intersect.txt
+
+#Ok, so that gave us an empty file (which is expected)
+#Trying it now on a gvcf
+while read line ; do
+	chr=$(echo $line | cut -f 1 -d " "); 
+	start=$(echo $line | cut -f 2 -d " " ); 
+	stop=$(echo $line | cut -f 3 -d " ") ; 
+	grep -v "^#" trimmed_Sb313_TdFL_Chr10.bin1.gvcf | awk -v OFS='\t' -v c="$chr" -v s="$start" -v e="$stop" '$1 == $c && $2 >= $s && $2 <= $e {print $0}' - ; 
+done < bin1.nodels.noheader.CDS.bed >> test.bin1.Chr10.manual.intersect.txt
+
+grep -v "^#" trimmed_Sb313_TdFL_Chr10.bin1.gvcf | awk -v OFS='\t' '{print $1, $2-1, $2}' - | sort -k1,2n | bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b - > test.chr10.bin1.TDFL.intersect.txt
+
+grep -v "#"  trimmed_Sb313_TdFL_Chr10.bin1.gvcf | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.TDFL.intersect.txt
+
+cut -f 14 test.chr10.bin1.TDFL.intersect.txt | sort | uniq -c
+   5216 0:30,0:30:0,90,90
+   6390 1:0,30,0:30:90,90,0
+
+grep "0:30,0:30:0,90,90" test.chr10.bin1.TDFL.intersect.txt | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - 
+grep "1:0,30,0:30:90,90,0" test.chr10.bin1.TDFL.intersect.txt | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' -
+
+grep "1:0,30,0:30:90,90,0" test.chr10.bin1.TDFL.intersect.txt | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - > test.chr10.bin1.TDFL.intersect.DELS.txt
+
+cut -f 13 test.chr10.bin1.TDFL.intersect.DELS.txt | sort | uniq -c
+
+for i in trimmed_*bin1.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+	bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.${i%Chr10.bin1.gvcf}.intersect.txt
+done
+
+for i in test.chr10.bin1.trimmed*.intersect.txt ; do 
+	cut -f 14 $i | sort | uniq -c 
+done
+
+for i in test.chr10.bin1.trimmed*.intersect.txt ; do
+	echo $i REF deletions vs. ALT deletions
+	grep "0:30,0:30:0,90,90" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - |wc -l
+	grep "1:0,30,0:30:90,90,0" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - | wc -l
+done
+
+for i in test.chr10.bin1.trimmed*.intersect.txt ; do
+	echo $i uniq ALT deletions
+	grep "1:0,30,0:30:90,90,0" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - | cut -f 13 | sort | uniq -c
+done
+
+#for the untrimmed gvcf 
+gunzip S*.gvcf.gz
+for i in S*bin1.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+	bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.${i%Chr10.bin1.gvcf}.intersect.txt
+done
+
+for i in test.chr10.bin1.S*.intersect.txt ; do 
+	cut -f 14 $i | sort | uniq -c 
+done
+
+for i in test.chr10.bin1.S*.intersect.txt ; do
+	echo $i REF deletions vs. ALT deletions
+	grep "0:30,0:30:0,90,90" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - |wc -l
+	grep "1:0,30,0:30:90,90,0" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - | wc -l
+done
+
+for i in test.chr10.bin1.S*.intersect.txt ; do
+	echo $i uniq ALT deletions
+	grep "1:0,30,0:30:90,90,0" $i | sed 's/<NON_REF>/N/g' | awk -v OFS='\t' 'length($12) > length($13) {print $0}' - | cut -f 13 | sort | uniq -c
+done
+
+
+### Are these sites truly not in the genome bin1 vcf?
+grep -v "^#" ready_Sb313_TdFL_Chr10.bin1.gvcf.gz.recode.vcf | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.TDFL.intersect.txt
+#They are
+
+###ARe these sites truly not in the combined bin1 vcf?
+grep -v "^#" chr10.bin1.vcf | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10, $11, $12,$13}' | sort -k1,1 -k2,2 > out.bed
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.intersect.txt
+#Site are recorded for those coordinates. Maybe some deletions, but a lot of SNP records
+#Could also be some instances where the two alt alleles refer to an insertion and a deletion at a site
+#What about in the reformatted?
+grep -v "^#" chr10.bin1.CDSonly.indelonly_reformatted.vcf | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10, $11, $12,$13}' | sort -k1,1 -k2,2 > out.bed
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.intersect.txt
+#all but 1 are insertions
+grep -v "^#" chr10.bin1.indelonly_reformatted.vcf | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10, $11, $12,$13}' | sort -k1,1 -k2,2 > out.bed
+bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.intersect.txt
+
+```
+
+Redoing the QC check more methodically:
+1. are the coordinates of the exons captured in the gvcf? 
+```
+##Need to make sure every exon is represented in intersect output
+
+wc -l bin*CDS.bed
+   331 bin1.nodels.noheader.CDS.bed
+   385 bin2.nodels.noheader.CDS.bed
+
+###do the intersect between gvcf and CDS regions of interest
+###first 8 columns come from CDS region bed and last 6 come from gvcf 
+for i in S*bin1.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+	bedtools intersect -wb -a bin1.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin1.${i%Chr10.bin1.gvcf}.intersect.txt
+done
+for i in S*bin2.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 > out.bed
+	bedtools intersect -wb -a bin2.nodels.noheader.CDS.bed -b out.bed  > test.chr10.bin2.${i%Chr10.bin2.gvcf}.intersect.txt
+done
+
+for i in test.chr10.bin*txt ; do
+	echo $i >> exons.in.gvcf.txt 
+	cut -f 6 $i | sort | uniq | wc -l >> exons.in.gvcf.txt ;
+done
+#manually remove every other \n to be \t
+
+cat exons.in.gvcf.txt 
+test.chr10.bin1.Sb313_TdFL_.intersect.txt	211
+test.chr10.bin1.Sb313_ZdGigi_.intersect.txt	207
+test.chr10.bin1.Sb313_ZmB73_.intersect.txt	204
+test.chr10.bin1.Sb313_ZvTIL01_.intersect.txt	203
+test.chr10.bin2.Sb313_TdFL_.intersect.txt	95
+test.chr10.bin2.Sb313_ZdGigi_.intersect.txt	80
+test.chr10.bin2.Sb313_ZmB73_.intersect.txt	92
+test.chr10.bin2.Sb313_ZvTIL01_.intersect.txt	92
+```
+*No, not every exon is in the gvcf*
+bin1 is only missing ~100-130 while the bin2 gvcfs are missing ~300
+Likely are missed in the alignment --> should be assigned as fractionated
+_How to assign as fractionated en masse_
+
+```
+for i in S*bin1.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -v -wb -a bin1.nodels.noheader.CDS.bed -b - | cut -f 6 | sort | uniq > ${i%.gvcf}.exonsNotInGVCF.txt
+done
+#double check that it's the numbers of exon IDs expected: 
+wc -l *bin1*.exonsNotInGVCF.txt
+
+for i in S*bin2.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -v -wb -a bin2.nodels.noheader.CDS.bed -b - | cut -f 6 | sort | uniq > ${i%.gvcf}.exonsNotInGVCF.txt
+done
+#double check that it's the numbers of exon IDs expected: 
+wc -l *bin2*.exonsNotInGVCF.txt
+
+#could get around the unzipping of the gvcf files using cat -z as the first step that pipes into the grep
+#would make this step into a slurm step
+#also need to consider how this would work with multiple chromosome files? Only if the nodels noheader files were split by Chr
+```
+2. differentiate the intersected variants to be indels only
+```
+for i in test.chr10.*_.intersect.txt ; do 
+	sed 's/<NON_REF>/N/g' $i | awk -v OFS='\t' 'length($13) > 1 || length($12) > 1 {print $0}' - | awk -v OFS='\t' '{split($13,a,",")};{print $1,$2,$3,$5,$6,$12,$13,a[1],a[2],$14}' - > ${i%.intersect.txt}indel.intersect.temp 
+done
+
+for i in *indel.intersect.temp ; do
+	awk -v OFS='\t' '(length($6) == 1 && (length($8) > 1 || length($9) > 1)) || (length($6) > 1 && (length($8) == 1 || length($9) == 1)) {print $0}' ${i} > ${i%.temp}.txt
+done
+
+rm *.temp
+
+for i in *indel.intersect.txt ; do echo $i >> indels.in.exons.in.gvcf.txt; cut -f 5 $i | sort | uniq | wc -l  >> indels.in.exons.in.gvcf.txt; done
+#manually remove every other \n to be \t
+
+cat indels.in.exons.in.gvcf.txt 
+test.chr10.bin1.Sb313_TdFL_indel.intersect.txt	89
+test.chr10.bin1.Sb313_ZdGigi_indel.intersect.txt	93
+test.chr10.bin1.Sb313_ZmB73_indel.intersect.txt	93
+test.chr10.bin1.Sb313_ZvTIL01_indel.intersect.txt	92
+test.chr10.bin2.Sb313_TdFL_indel.intersect.txt	43
+test.chr10.bin2.Sb313_ZdGigi_indel.intersect.txt	32
+test.chr10.bin2.Sb313_ZmB73_indel.intersect.txt	45
+test.chr10.bin2.Sb313_ZvTIL01_indel.intersect.txt	43
+```
+
+*So only a handful of exons have indels in them*
+For the bin1, it's ~100 exons that don't have indels.
+For bin2, it's about ~40-50 exons that don't have indels. 
+Those that don't have indels (only SNPs), they should be considered retained.
+
+3. Are there any exons where there are indels but no dels (for either ALT)? Are there any missed deletions?
+```
+for i in *indel.intersect.txt ; do
+	awk -v OFS='\t' 'length($6) == 1 {print $0}' $i > ${i%indel.intersect.txt}insertion.intersect.txt
+	awk -v OFS='\t' 'length($6) > 1 {print $0}' $i > ${i%indel.intersect.txt}deletion.intersect.txt
+done
+
+for i in *deletion.intersect.txt ; do cut -f 5 $i | sort | uniq > ${i%intersect.txt}CDSID.txt ; done
+
+for i in *insertion.intersect.txt ; do 
+echo $i #know what's being counted
+wc -l ${i%insertion.intersect.txt}deletion.CDSID.txt #how many CDS have a deletion
+grep -f ${i%insertion.intersect.txt}deletion.CDSID.txt $i | cut -f 5 | sort | uniq |wc -l #how many CDS with a deletion are found with an insertion
+done
+
+test.chr10.bin1.Sb313_TdFL_insertion.intersect.txt
+67 test.chr10.bin1.Sb313_TdFL_deletion.CDSID.txt
+36
+test.chr10.bin1.Sb313_ZdGigi_insertion.intersect.txt
+67 test.chr10.bin1.Sb313_ZdGigi_deletion.CDSID.txt
+39
+test.chr10.bin1.Sb313_ZmB73_insertion.intersect.txt
+68 test.chr10.bin1.Sb313_ZmB73_deletion.CDSID.txt
+40
+test.chr10.bin1.Sb313_ZvTIL01_insertion.intersect.txt
+67 test.chr10.bin1.Sb313_ZvTIL01_deletion.CDSID.txt
+40
+test.chr10.bin2.Sb313_TdFL_insertion.intersect.txt
+31 test.chr10.bin2.Sb313_TdFL_deletion.CDSID.txt
+23
+test.chr10.bin2.Sb313_ZdGigi_insertion.intersect.txt
+25 test.chr10.bin2.Sb313_ZdGigi_deletion.CDSID.txt
+16
+test.chr10.bin2.Sb313_ZmB73_insertion.intersect.txt
+33 test.chr10.bin2.Sb313_ZmB73_deletion.CDSID.txt
+27
+test.chr10.bin2.Sb313_ZvTIL01_insertion.intersect.txt
+34 test.chr10.bin2.Sb313_ZvTIL01_deletion.CDSID.txt
+28
+
+#Are there any insertions without a deletion?
+for i in *insertion.intersect.txt ; do cut -f 5 $i | sort | uniq > ${i%intersect.txt}CDSID.txt ; done
+for i in *deletion.intersect.txt ; do 
+echo $i #know what's being counted
+wc -l ${i%deletion.intersect.txt}insertion.CDSID.txt #how many CDS have a insertion
+grep -f ${i%deletion.intersect.txt}insertion.CDSID.txt $i | cut -f 5 | sort | uniq |wc -l #how many CDS with an insertion are found with a deletion
+done
+
+test.chr10.bin1.Sb313_TdFL_deletion.intersect.txt
+58 test.chr10.bin1.Sb313_TdFL_insertion.CDSID.txt
+36
+test.chr10.bin1.Sb313_ZdGigi_deletion.intersect.txt
+65 test.chr10.bin1.Sb313_ZdGigi_insertion.CDSID.txt
+39
+test.chr10.bin1.Sb313_ZmB73_deletion.intersect.txt
+65 test.chr10.bin1.Sb313_ZmB73_insertion.CDSID.txt
+40
+test.chr10.bin1.Sb313_ZvTIL01_deletion.intersect.txt
+65 test.chr10.bin1.Sb313_ZvTIL01_insertion.CDSID.txt
+40
+test.chr10.bin2.Sb313_TdFL_deletion.intersect.txt
+35 test.chr10.bin2.Sb313_TdFL_insertion.CDSID.txt
+23
+test.chr10.bin2.Sb313_ZdGigi_deletion.intersect.txt
+23 test.chr10.bin2.Sb313_ZdGigi_insertion.CDSID.txt
+16
+test.chr10.bin2.Sb313_ZmB73_deletion.intersect.txt
+39 test.chr10.bin2.Sb313_ZmB73_insertion.CDSID.txt
+27
+test.chr10.bin2.Sb313_ZvTIL01_deletion.intersect.txt
+37 test.chr10.bin2.Sb313_ZvTIL01_insertion.CDSID.txt
+28
+```
+
+*There are a few exons that only have insertions, but the majority have insertions and deletions*
+
+For those that don't have a deletion:
+_How to assign as retained en masse_
+```
+# use *_deletion.CDSID.txt since these are the CDS that have a deletion
+# use test.chr10.*_.intersect.txt since these are the CDS in the gvcf 
+
+for i in test.chr10.bin1*_.intersect.txt ; do 
+	n=${i#test.chr10.bin1.}
+	grep -v -w -f ${i%.intersect.txt}deletion.CDSID.txt $i | cut -f 6 | sort | uniq > ${n%_.intersect.txt}_Chr10.bin1.retainedCDS.txt
+done
+
+#make sure it's the number we expect:
+wc -l *bin1.retainedCDS.txt
+
+for i in test.chr10.bin2*_.intersect.txt ; do 
+	n=${i#test.chr10.bin2.}
+	grep -v -w -f ${i%.intersect.txt}deletion.CDSID.txt $i | cut -f 6 | sort | uniq > ${n%_.intersect.txt}_Chr10.bin2.retainedCDS.txt
+done
+#make sure it's the number we expect:
+wc -l *bin2.retainedCDS.txt
+
+```
+6. Are these deletions invariant REF allele?
+```
+#grep Sobic.010G000500.1.v3.1.CDS.1 *bin2*deletion.intersect.txt #example
+
+#Create a master list of CDS IDs with deletions in bin1 or bin2 (current specific to each genome)
+## shows that most of the genomes have the same CDS that have a deletion detected
+cat test.chr10.bin1.Sb313_TdFL_deletion.CDSID.txt test.chr10.bin1.Sb313_ZmB73_deletion.CDSID.txt test.chr10.bin1.Sb313_ZdGigi_deletion.CDSID.txt test.chr10.bin1.Sb313_ZvTIL01_deletion.CDSID.txt | sort | uniq -c 
+cat test.chr10.bin2.Sb313_TdFL_deletion.CDSID.txt test.chr10.bin2.Sb313_ZmB73_deletion.CDSID.txt test.chr10.bin2.Sb313_ZdGigi_deletion.CDSID.txt test.chr10.bin2.Sb313_ZvTIL01_deletion.CDSID.txt | sort | uniq -c 
+
+cat test.chr10.bin1.Sb313_TdFL_deletion.CDSID.txt test.chr10.bin1.Sb313_ZmB73_deletion.CDSID.txt test.chr10.bin1.Sb313_ZdGigi_deletion.CDSID.txt test.chr10.bin1.Sb313_ZvTIL01_deletion.CDSID.txt | sort | uniq > bin1.deletion.CDSID.txt
+cat test.chr10.bin2.Sb313_TdFL_deletion.CDSID.txt test.chr10.bin2.Sb313_ZmB73_deletion.CDSID.txt test.chr10.bin2.Sb313_ZdGigi_deletion.CDSID.txt test.chr10.bin2.Sb313_ZvTIL01_deletion.CDSID.txt | sort | uniq > bin2.deletion.CDSID.txt
+
+#gets the genotypes for each deletion
+grep -f bin1.deletion.CDSID.txt *bin1*deletion.intersect.txt | cut -f 1,5,10 >> bin1.genotypes.deletions.intersect.txt
+grep -f bin2.deletion.CDSID.txt *bin2*deletion.intersect.txt | cut -f 1,5,10 >> bin2.genotypes.deletions.intersect.txt
+
+#shows that all the genotypes are the alt allele
+cut -f 3 bin1.genotypes.deletions.intersect.txt | sort | uniq -c
+cut -f 3 bin2.genotypes.deletions.intersect.txt | sort | uniq -c
+
+```
+
+*The only genotypes here are the ALT genotype, so not invariant REF*
+
+7. If not invariant REF for deletion alleles, verify that the coordinates are missing in the bin1.vcf and bin2.vcf
+```
+for i in *bin1*deletion.intersect.txt ; do 
+cut -f 1-5 $i | bedtools intersect -wb -a ../chr10.bin1.CDSonly.indelonly_reformatted.vcf -b - >> bin1.deletion.intersect.checkVCF.temp
+done
+sort bin1.deletion.intersect.checkVCF.temp | uniq > bin1.deletion.intersect.checkVCF.txt
+
+for i in *bin2*deletion.intersect.txt ; do 
+cut -f 1-5 $i | bedtools intersect -wb -a ../chr10.bin2.CDSonly.indelonly_reformatted.vcf -b - >> bin2.deletion.intersect.checkVCF.temp
+done
+sort bin2.deletion.intersect.checkVCF.temp | uniq > bin2.deletion.intersect.checkVCF.txt
+
+rm *checkVCF.temp
+
+wc -l bin*.deletion.CDSID.txt #number of unique CDS IDs that have a deletion identified from GVCF
+
+ 80 bin1.deletion.CDSID.txt
+41 bin2.deletion.CDSID.txt
+
+wc -l *checkVCF.txt #Number of deletions found in the VCF related to those CDS IDs
+	13 bin1.deletion.intersect.checkVCF.txt
+     5 bin2.deletion.intersect.checkVCF.txt
+
+cut -f 18 bin1.deletion.intersect.checkVCF.txt | sort | uniq | wc -l #number of uniq CDS IDs with deletion identified from GVCF also found in the VCF
+#10
+Sobic.010G003100.1.v3.1.CDS.1 #was in there for both
+Sobic.010G023600.1.v3.1.CDS.3
+Sobic.010G028800.2.v3.1.CDS.2
+Sobic.010G046400.1.v3.1.CDS.1
+Sobic.010G097200.1.v3.1.CDS.2
+Sobic.010G200900.1.v3.1.CDS.1
+Sobic.010G202100.1.v3.1.CDS.2
+Sobic.010G224501.1.v3.1.CDS.1
+Sobic.010G236300.1.v3.1.CDS.1
+Sobic.010G247500.1.v3.1.CDS.3
+cut -f 18 bin2.deletion.intersect.checkVCF.txt | sort | uniq | wc -l 
+#4
+Sobic.010G016100.1.v3.1.CDS.1
+Sobic.010G115200.1.v3.1.CDS.4
+Sobic.010G164500.1.v3.1.CDS.1
+Sobic.010G247500.1.v3.1.CDS.1
+```
+*A handful are in the VCF but most are not*
+#How to identify fully retained homoeologs that don't show up in either bin?
+```
+#1. intersect with gvcfs
+for i in S*bin1.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -wb -a ../chr10.nodel.forEitherBin.bed -b - | cut -f 6 | sort | uniq > ${i%.gvcf}.nodel.forEitherBin.exonsInGVCF.IDs.txt
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -wb -a ../chr10.nodel.forEitherBin.bed -b - > ${i%.gvcf}.nodel.forEitherBin.exonsInGVCF.txt
+done
+for i in S*bin2.gvcf ; do 
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -wb -a ../chr10.nodel.forEitherBin.bed -b - | cut -f 6 | sort | uniq > ${i%.gvcf}.nodel.forEitherBin.exonsInGVCF.IDs.txt
+	grep -v "#"  $i | awk -v OFS="\t" '{print $1,$2,$2,$4,$5,$10}' | sort -k1,1 -k2,2 | bedtools intersect -wb -a ../chr10.nodel.forEitherBin.bed -b - > ${i%.gvcf}.nodel.forEitherBin.exonsInGVCF.txt
+done
+
+wc -l ../chr10.nodel.forEitherBin.bed #4915 CDS to start with
+wc -l *.nodel.forEitherBin.exonsInGVCFIDs.txt
+  3291 Sb313_TdFL_Chr10.bin1.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  2023 Sb313_TdFL_Chr10.bin2.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  3151 Sb313_ZdGigi_Chr10.bin1.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  1850 Sb313_ZdGigi_Chr10.bin2.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  3241 Sb313_ZmB73_Chr10.bin1.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  1891 Sb313_ZmB73_Chr10.bin2.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  3203 Sb313_ZvTIL01_Chr10.bin1.nodel.forEitherBin.exonsInGVCF.IDs.txt
+  1869 Sb313_ZvTIL01_Chr10.bin2.nodel.forEitherBin.exonsInGVCF.IDs.txt
+
+
+#2. are the ones in the GVCF without a deletion?
+for i in *.nodel.forEitherBin.exonsInGVCF.txt ; do 
+	sed 's/<NON_REF>/N/g' $i | awk -v OFS='\t' 'length($13) > 1 || length($12) > 1 {print $0}' - | awk -v OFS='\t' '{split($13,a,",")};{print $1,$2,$3,$5,$6,$12,$13,a[1],a[2],$14}' - > ${i%.txt}indel.temp 
+done
+
+for i in *indel.temp ; do
+	awk -v OFS='\t' '(length($6) == 1 && (length($8) > 1 || length($9) > 1)) || (length($6) > 1 && (length($8) == 1 || length($9) == 1)) {print $0}' ${i} > ${i%.temp}.txt
+done
+
+rm *.temp
+
+wc -l *nodel.forEitherBin.exonsInGVCFindel.txt
+#there were a few indels in these regions (all < 1000)
+
+for i in *nodel.forEitherBin.exonsInGVCFindel.txt ; do
+	awk -v OFS='\t' 'length($6) == 1 {print $0}' $i > ${i%indel.txt}_insertion.intersect.txt
+	awk -v OFS='\t' 'length($6) > 1 {print $0}' $i > ${i%indel.txt}_deletion.intersect.txt
+done
+
+#are there any deletions I should be aware of?
+wc -l *nodel.forEitherBin.exonsInGVCF_deletion.intersect.txt 
+##yes, ~300 dels per file
+   
+for i in *nodel.forEitherBin.exonsInGVCF_deletion.intersect.txt ; do cut -f 5 $i | sort | uniq > ${i%intersect.txt}CDSID.txt ; done
+
+#3. for those with a deletion, are they in the VCF?
+for i in *bin1*nodel.forEitherBin.exonsInGVCF_deletion.intersect.txt ; do 
+cut -f 1-5 $i | bedtools intersect -wb -a ../chr10.bin1.CDSonly.indelonly_reformatted.vcf -b - >> bin1.deletion.nodel.forEitherBin.checkVCF.temp
+done
+sort bin1.deletion.nodel.forEitherBin.checkVCF.temp | uniq > bin1.deletion.nodel.forEitherBin.checkVCF.txt
+
+for i in *bin2*nodel.forEitherBin.exonsInGVCF_deletion.intersect.txt ; do 
+cut -f 1-5 $i | bedtools intersect -wb -a ../chr10.bin2.CDSonly.indelonly_reformatted.vcf -b - >> bin2.deletion.nodel.forEitherBin.checkVCF.temp
+done
+sort bin2.deletion.nodel.forEitherBin.checkVCF.temp | uniq > bin2.deletion.nodel.forEitherBin.checkVCF.txt
+
+rm *checkVCF.temp
+
+wc -l *nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt #number of unique CDS IDs that have a deletion identified from GVCF
+  212 Sb313_TdFL_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  139 Sb313_TdFL_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  234 Sb313_ZdGigi_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  140 Sb313_ZdGigi_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  249 Sb313_ZmB73_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  149 Sb313_ZmB73_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  246 Sb313_ZvTIL01_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+  154 Sb313_ZvTIL01_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+
+#across all the deletion CDS ID files, how many CDS IDs are unique?
+cat Sb313_TdFL_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+ Sb313_ZdGigi_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+  Sb313_ZmB73_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+   Sb313_ZvTIL01_Chr10.bin1.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt | sort | wc -l
+322
+
+cat Sb313_TdFL_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+ Sb313_ZdGigi_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+  Sb313_ZmB73_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt \
+   Sb313_ZvTIL01_Chr10.bin2.nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt | sort | wc -l
+582
+
+wc -l *deletion.nodel.forEitherBin.checkVCF.txt #Number of deletions found in the VCF related to those CDS IDs
+	 23 bin1.deletion.nodel.forEitherBin.checkVCF.txt
+      7 bin2.deletion.nodel.forEitherBin.checkVCF.txt
+      
+cut -f 18 bin1.deletion.nodel.forEitherBin.checkVCF.txt | sort | uniq 
+Sobic.010G000300.1.v3.1.CDS.1
+Sobic.010G024500.1.v3.1.CDS.4
+Sobic.010G151700.1.v3.1.CDS.1
+Sobic.010G151700.1.v3.1.CDS.2
+Sobic.010G152000.1.v3.1.CDS.4
+Sobic.010G164200.1.v3.1.CDS.1
+Sobic.010G167900.4.v3.1.CDS.10
+Sobic.010G168400.1.v3.1.CDS.1
+Sobic.010G168400.1.v3.1.CDS.4
+Sobic.010G168500.1.v3.1.CDS.4
+Sobic.010G177100.1.v3.1.CDS.1
+Sobic.010G231600.1.v3.1.CDS.2
+Sobic.010G262800.2.v3.1.CDS.1
+Sobic.010G275700.1.v3.1.CDS.5
+Sobic.010G278500.1.v3.1.CDS.1
+
+cut -f 18 bin2.deletion.nodel.forEitherBin.checkVCF.txt | sort | uniq 
+Sobic.010G090100.1.v3.1.CDS.1
+Sobic.010G140700.1.v3.1.CDS.1
+Sobic.010G161400.1.v3.1.CDS.2
+Sobic.010G173700.1.v3.1.CDS.2
+Sobic.010G188400.2.v3.1.CDS.9
+Sobic.010G199500.1.v3.1.CDS.4
+
+```
+
+For those that don't have a deletion:
+_How to assign as retained en masse_
+```
+# use *nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt since these are the CDS that have a deletion
+# use *.nodel.forEitherBin.exonsInGVCF.txt since these are the CDS in the gvcf 
+
+for i in *.nodel.forEitherBin.exonsInGVCF.txt ; do 
+	grep -v -w -f ${i%.txt}_deletion.CDSID.txt $i | cut -f 6 | sort | uniq > ${i%.exonsInGVCF.txt}_retainedCDS.txt
+done
+
+#make sure it's the number we expect:
+wc -l *nodel.forEitherBin.exonsInGVCF_deletion.CDSID.txt
+for i in *.nodel.forEitherBin.exonsInGVCF.txt ; do echo $i ; cut -f 6 $i | sort | uniq | wc -l ; done
+
+wc -l *_retainedCDS.txt
+  3079 Sb313_TdFL_Chr10.bin1.nodel.forEitherBin_retainedCDS.txt
+  1884 Sb313_TdFL_Chr10.bin2.nodel.forEitherBin_retainedCDS.txt
+  2917 Sb313_ZdGigi_Chr10.bin1.nodel.forEitherBin_retainedCDS.txt
+  1710 Sb313_ZdGigi_Chr10.bin2.nodel.forEitherBin_retainedCDS.txt
+  2992 Sb313_ZmB73_Chr10.bin1.nodel.forEitherBin_retainedCDS.txt
+  1742 Sb313_ZmB73_Chr10.bin2.nodel.forEitherBin_retainedCDS.txt
+  2957 Sb313_ZvTIL01_Chr10.bin1.nodel.forEitherBin_retainedCDS.txt
+  1715 Sb313_ZvTIL01_Chr10.bin2.nodel.forEitherBin_retainedCDS.txt
+```
+For those that aren't in the GVCFs, 
+if it's not in both bin1 and bin2 of the same genome,
+then assign it as fractionated?
+
+```
+for i in *nodel.forEitherBin.exonsInGVCF.IDs.txt ; do
+	grep -v -w -f $i ../chr10.nodel.forEitherBin.bed | cut -f 6 > ${i%exonsInGVCF.IDs.txt}exonsNotInGVCF.IDs.txt 
+done
+
+#Double check it's what we expect
+wc -l *exonsNotInGVCF.IDs.txt
+```
+#See if the deletions are encompassing many CDS and that's why we're not finding them
+Because deletions are represented in the *VCFs as point
+
+```
+cd /work/LAS/mhufford-lab/snodgras/Fractionation/split_mafs_4genomeTrial/unzipped_gvcf
+
+#finds deletions genotyped in the gvcfs
+for i in *.gvcf ; do 
+grep -v "#" $i | tr ';' '\t' | awk -v OFS="\t" '{if($5 ~/,/)print $1,$2,$4,$5,$11}' | tr ',' '\t' | sed "s/<NON_REF>/N/g" | awk -v OFS="\t" '{if($4 != N)print $1,$2,$3,length($4),$4,$6;else if ($5 != N) print $1,$2,$3,length($5),$5,$6}' | awk -v OFS="\t" '{if($4 > 2 && $6 ~/+/)print $1,$2,$2+$4,$4,$6;else if ($4 > 2 && $6 ~/-/)print $1,$2-$4,$2,$4,$6}' | awk -v OFS='\t' '{if($2 < 1) print $1,1,$3,$4,$5; else print $0}' -|sed "s/ASM_Strand=//g" > ${i}.dels.bed
+done
+
+ml bedtools2
+
+#allows each deletion to intersect with the ref exon coordinates
+#see if a deletion overlaps with multiple ref exons
+for i in *.dels.bed ; do 
+bedtools intersect -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed -b $i > ${i%.bed}.refExons.intersect
+done
+
+for i in *.refExons.intersect ; do
+	echo Count of unique ref exon IDs that intersected with a deletion from GVCF of ${i%.gvcf.dels.refExons.intersect}:
+	cut -f 4 $i | sort | uniq | wc -l 
+done
+
+#since this is just chr10
+awk -v OFS='\t' '$1 == "10" {print $0}' /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed | wc -l 
+#out of 5808
+
+#Maggie checked her files for things that should be called missing in Sb
+##Checking that against what we got from the intersect
+
+awk -v OFS='\t' '$2 == "Chr10" {print $0}' Sb-Av_genes_vs_B73v5_PAV.txt > Sb-Av_genes_vs_B73v5_PAV.SbChr10.txt
+for i in *intersect ; do 
+	cut -f 4 $i | cut -f 2 -d ";" | sed "s/Parent=//g" | sed "s/.1.v3.1//g" | sort | uniq > ${i}.ids.txt
+done
+
+cut -f 1 Sb-Av_genes_vs_B73v5_PAV.SbChr10.txt | sort | uniq > Sb-Av_genes_vs_B73v5_PAV.SbChr10.Sbids.txt
+for i in *.ids.txt ; do grep -w -f Sb-Av_genes_vs_B73v5_PAV.SbChr10.Sbids.txt $i > ${i%.txt}.overlap ; done
+for i in *.ids.txt ; do grep -w -v -f Sb-Av_genes_vs_B73v5_PAV.SbChr10.Sbids.txt $i > ${i%.txt}.exclude ; done
+
+#try putting all the bins for a given genome together into a single file to see if that captures more of the ref genes in total
+for i in TdFL ZdGigi ZmB73 ZvTIL01 ; do 
+	cat Sb313_${i}_Chr10.bin1.gvcf.dels.refExons.intersect Sb313_${i}_Chr10.bin2.gvcf.dels.refExons.intersect | cut -f 4 | cut -f 2 -d ";" | sed "s/Parent=//g" | sed "s/.1.v3.1//g" | sort | uniq > ${i}.bothbins.ids.txt
+	grep -w -f Sb-Av_genes_vs_B73v5_PAV.SbChr10.Sbids.txt ${i}.bothbins.ids.txt > ${i}.bothbins.ids.overlap
+	grep -w -v -f Sb-Av_genes_vs_B73v5_PAV.SbChr10.Sbids.txt ${i}.bothbins.ids.txt > ${i}.bothbins.ids.exclude
+done
+``` 
+
+#To double check the things that aren't in GVCFs vs. things that are
+
+1. Make blastdb
+```slurm_09.1.makeblastdb.sh
+#!/bin/bash
+
+module load blast-plus
+
+mkdir blastdb_files
+
+#looping blastdb:
+
+for sample in assemblies_final/*.fasta
+        do
+                echo $sample
+                describer=$(echo ${sample#assemblies_final/} | cut -f 1-2 -d "-")
+                echo $describer
+
+makeblastdb -in ${sample} -dbtype nucl -out blastdb_files/${describer}
+
+done
+
+for sample in NAM-assemblies/*.fasta
+        do
+                echo $sample
+                describer=$(echo ${sample#NAM-assemblies/} | cut -f 1 -d ".")
+                echo $describer
+
+makeblastdb -in ${sample} -dbtype nucl -out blastdb_files/${describer}
+
+done
+```
+
+2. Get the fastas of each exon to be examined
+```slurm_09.2.getExonFastas.sh
+for i in split_mafs_4genomeTrial/unzipped_gvcf/*forEitherBin.exonsNotInGVCF.IDs.txt ; do cat $i >> split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.IDs.temp ;done
+sort split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.IDs.temp | uniq > split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.IDs.txt
+rm split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.IDs.temp
+
+grep -w -f split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.IDs.txt split_mafs_4genomeTrial/chr10.nodel.forEitherBin.bed > split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.bed
+
+for i in split_mafs_4genomeTrial/unzipped_gvcf/*forEitherBin.exonsInGVCF.IDs.txt ; do cat $i >> split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.IDs.temp ;done
+sort split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.IDs.temp | uniq > split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.IDs.txt
+rm split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.IDs.temp
+
+grep -w -f split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.IDs.txt split_mafs_4genomeTrial/chr10.nodel.forEitherBin.bed > split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.bed
+
+mkdir QC_exon_fasta
+
+ml bedtools2
+
+bedtools getfasta -fi Sb313.chr10.fasta -bed split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsNotInGVCF.bed -name -fo QC_exon_fasta/exonsNotInGVCF_Sb313.chr10.fasta
+bedtools getfasta -fi Sb313.chr10.fasta -bed split_mafs_4genomeTrial/unzipped_gvcf/ALL.nodel.forEitherBin.exonsInGVCF.bed -name -fo QC_exon_fasta/exonsInGVCF_Sb313.chr10.fasta
+
+```
+
+3. Run dc-megablast
+```
+#!/bin/bash
+
+module load blast-plus
+
+mkdir blast_output
+
+# have all your masked blast databases within the same directory
+
+for database in blastdb_files/*.nhr
+
+        do
+        
+        n=${database%.*}
+
+blastn -task dc-megablast -outfmt 6 -query QC_exon_fasta/exonsNotInGVCF_Sb313.chr10.fasta -db ${database%.*} -num_threads 4  -out "blast_output/${n#blastdb_files/}_exonsNotInGVCF.txt"
+blastn -task dc-megablast -outfmt 6 -query QC_exon_fasta/exonsInGVCF_Sb313.chr10.fasta -db ${database%.*} -num_threads 4  -out "blast_output/${n#blastdb_files/}_exonsInGVCF.txt"
+
+        done
+```
+
+Where the columns are:
+1. qseqid: query sequence ID (name from fasta)
+2. sseqid: subject sequence id (name from database)
+3. pident: percentage of identical positions
+4. length: alignment length (sequence overlap)
+5. mismatch: number of mismatches
+6. gapopen: number of gap openings
+7. qstart: start of alignment in query
+8. qend : end of alignment in query
+9. sstart: start of alignment in subject
+10. send: end of alignment in subject
+11. evalue: expect value (smaller E-value means a better match) [0.01 is considered good for homology matches]
+12. bitscore: bit score (higher the bit score, the better the sequence similarity)
+
+_Note: I edited it to have a max target seq number of 2 (only reports top 2 hits). This may miss second homoeologs that are more lost than the first_
+
+4. Parse the megablast output file
+For exons NOT in GVCF, there are 4148 unique entries
+For exons IN GVCF, there are 4285 unique entries
+```slurm_09.4.parseblastoutput.sh
+cd blast_output
+
+for i in *txt ; do 
+	awk -v OFS='\t' '$11 < 0.01 && $3 > 50 {print $0}' ${i} > ${i%.txt}.filtered
+done
+
+for i in *.filtered ; do cut -f 1 $i | sort | uniq -c > ${i}.IDcounts ; done
+
+for i in ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_TdFL_Chr10.bin*.nodel.forEitherBin.exonsNotInGVCF.IDs.txt ; do
+	bin=$(echo $i | sed "s/..\/split_mafs_4genomeTrial\/unzipped_gvcf\/Sb313_//g" |cut -f 2 -d ".")
+	grep Chr10 ../parsing_coordinates/TdFL.bins.txt | grep $bin |cut -f 1 > chr.list
+	while read -r line ; do 
+		grep -w -f ${i} Td-FL_9056069_6_exonsNotInGVCF.filtered | awk -v OFS='\t' -v chr=$(echo $line) '$2 == chr {print $0}' >> TdFL.${bin}.exonsNotInGVCF.blast; 
+	done < chr.list
+done
+
+for i in TdFL.bin* ; do echo $i ; cut -f 1 $i | sort | uniq | wc -l ; done
+TdFL.bin1.exonsNotInGVCF.blast
+619
+TdFL.bin2.exonsNotInGVCF.blast
+545
+(base) [snodgras@nova18-1 blast_output]$ wc -l  ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_TdFL_Chr10.bin*.nodel.forEitherBin.exonsNotInGVCF.IDs.txt 
+  1624 ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_TdFL_Chr10.bin1.nodel.forEitherBin.exonsNotInGVCF.IDs.txt
+  2892 ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_TdFL_Chr10.bin2.nodel.forEitherBin.exonsNotInGVCF.IDs.txt
+  4516 total
+  
+for i in ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_ZdGigi_Chr10.bin*.nodel.forEitherBin.exonsNotInGVCF.IDs.txt ; do
+	bin=$(echo $i | sed "s/..\/split_mafs_4genomeTrial\/unzipped_gvcf\/Sb313_//g" |cut -f 2 -d ".")
+	grep Chr10 ../parsing_coordinates/ZdGigi.bins.txt | grep $bin |cut -f 1 > chr.list
+	while read -r line ; do 
+		grep -w -f ${i} Zd-Gigi_exonsNotInGVCF.filtered | awk -v OFS='\t' -v chr=$(echo $line) '$2 == chr {print $0}' >> ZdGigi.${bin}.exonsNotInGVCF.blast; 
+	done < chr.list
+done
+
+for i in ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_ZvTIL01_Chr10.bin*.nodel.forEitherBin.exonsNotInGVCF.IDs.txt ; do
+	bin=$(echo $i | sed "s/..\/split_mafs_4genomeTrial\/unzipped_gvcf\/Sb313_//g" |cut -f 2 -d ".")
+	grep Chr10 ../parsing_coordinates/ZvTIL01.bins.txt | grep $bin |cut -f 1 > chr.list
+	while read -r line ; do 
+		grep -w -f ${i} Zv-TIL01_exonsNotInGVCF.filtered | awk -v OFS='\t' -v chr=$(echo $line) '$2 == chr {print $0}' >> ZvTIL01.${bin}.exonsNotInGVCF.blast; 
+	done < chr.list
+done
+
+for i in ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_ZmB73_Chr10.bin*.nodel.forEitherBin.exonsNotInGVCF.IDs.txt ; do
+	bin=$(echo $i | sed "s/..\/split_mafs_4genomeTrial\/unzipped_gvcf\/Sb313_//g" |cut -f 2 -d ".")
+	grep Chr10 ../parsing_coordinates/ZmB73.bins.txt | grep $bin |cut -f 1 > chr.list
+	while read -r line ; do 
+		grep -w -f ${i} Zm-B73_exonsNotInGVCF.filtered | awk -v OFS='\t' -v chr=$(echo $line) '$2 == chr {print $0}' >> ZmB73.${bin}.exonsNotInGVCF.blast; 
+	done < chr.list
+done
+
+for i in TdFL ZdGigi ZvTIL01 ZmB73 ; do 
+	echo exons found in blast not in GVCF for ${i}.bin1:
+	cut -f 1 ${i}.bin1.exonsNotInGVCF.blast |sort |uniq |wc -l 
+	echo out of exons not found in GVCF:
+	wc -l ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_${i}_Chr10.bin1.nodel.forEitherBin.exonsNotInGVCF.IDs.txt |cut -f 1 -d " "
+	echo exons found in blast not in GVCF for ${i}.bin2:
+	cut -f 1 ${i}.bin2.exonsNotInGVCF.blast |sort |uniq |wc -l 
+	echo out of exons not found in GVCF:
+	wc -l ../split_mafs_4genomeTrial/unzipped_gvcf/Sb313_${i}_Chr10.bin2.nodel.forEitherBin.exonsNotInGVCF.IDs.txt |cut -f 1 -d " "
+done
+```
 
 
 
@@ -1980,104 +3198,7 @@ for i in *.bed ; do
 	sort $i | uniq > uniq.${i} 
 done
 ```
-Then split the assembly files using the bed coordinates
-```splitGenomes.sh
-#!/bin/bash
-outname=$1
-assembly=$2
-bed=$3
-
-#module load bedtools2
-bedtools getfasta -fo split_genome_assemblies/${outname} -fi ${assembly} -bed ${bed}
-```
-
-```
-module load bedtools2 #this way it doesn't have to reload everytime
-bedtools getfasta -fo split_genome_assemblies/TdFL.bin2.fasta -fi assemblies_final/Td-FL_9056069_6-REFERENCE-PanAnd-2.0a.fasta -bed parsing_coordinates/uniq.zmB73vsTdFL.bin2.bed
-bedtools getfasta -fo split_genome_assemblies/TdFL.bin1.fasta -fi assemblies_final/Td-FL_9056069_6-REFERENCE-PanAnd-2.0a.fasta -bed parsing_coordinates/uniq.zmB73vsTdFL.bin1.bed 
-
-bash scripts/splitGenomes.sh ZdGigi.bin1.fasta assemblies_final/Zd-Gigi-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZdGigi.bin1.bed
-bash scripts/splitGenomes.sh ZdGigi.bin2.fasta assemblies_final/Zd-Gigi-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZdGigi.bin2.bed
-bash scripts/splitGenomes.sh ZdMomo.bin1.fasta assemblies_final/Zd-Momo-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZdMomo.bin1.bed
-bash scripts/splitGenomes.sh ZhRIMHU001.bin1.fasta assemblies_final/Zh-RIMHU001-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZhRIMHU001.bin1.bed
-bash scripts/splitGenomes.sh ZnPI615697.bin1.fasta assemblies_final/Zn-PI615697-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZnPI615697.bin1.bed
-bash scripts/splitGenomes.sh ZvTIL01.bin1.fasta assemblies_final/Zv-TIL01-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZvTIL01.bin1.bed
-bash scripts/splitGenomes.sh ZvTIL11.bin1.fasta assemblies_final/Zv-TIL11-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZvTIL11.bin1.bed
-bash scripts/splitGenomes.sh ZxTIL18.bin1.fasta assemblies_final/Zx-TIL18-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZxTIL18.bin1.bed
-bash scripts/splitGenomes.sh ZxTIL25.bin1.fasta assemblies_final/Zx-TIL25-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZxTIL25.bin1.bed
-bash scripts/splitGenomes.sh ZmB73.bin1.fasta NAM-assemblies/Zm-B73.fasta parsing_coordinates/uniq.zmB73vsZmB73.bin1.bed      
-bash scripts/splitGenomes.sh ZmB97.bin1.fasta NAM-assemblies/Zm-B97.fasta parsing_coordinates/uniq.zmB73vsZmB97.bin1.bed      
-bash scripts/splitGenomes.sh ZmCML103.bin1.fasta NAM-assemblies/Zm-CML103.fasta parsing_coordinates/uniq.zmB73vsZmCML103.bin1.bed   
-bash scripts/splitGenomes.sh ZmCML228.bin1.fasta NAM-assemblies/Zm-CML228.fasta parsing_coordinates/uniq.zmB73vsZmCML228.bin1.bed    
-bash scripts/splitGenomes.sh ZmCML247.bin1.fasta NAM-assemblies/Zm-CML247.fasta parsing_coordinates/uniq.zmB73vsZmCML247.bin1.bed    
-bash scripts/splitGenomes.sh ZmCML277.bin1.fasta NAM-assemblies/Zm-CML277.fasta parsing_coordinates/uniq.zmB73vsZmCML277.bin1.bed    
-bash scripts/splitGenomes.sh ZmCML322.bin1.fasta NAM-assemblies/Zm-CML322.fasta parsing_coordinates/uniq.zmB73vsZmCML322.bin1.bed   
-bash scripts/splitGenomes.sh ZmCML333.bin1.fasta NAM-assemblies/Zm-CML333.fasta parsing_coordinates/uniq.zmB73vsZmCML333.bin1.bed    
-bash scripts/splitGenomes.sh ZmCML52.bin1.fasta NAM-assemblies/Zm-CML52.fasta parsing_coordinates/uniq.zmB73vsZmCML52.bin1.bed 
-bash scripts/splitGenomes.sh ZmCML69.bin1.fasta NAM-assemblies/Zm-CML69.fasta parsing_coordinates/uniq.zmB73vsZmCML69.bin1.bed
-bash scripts/splitGenomes.sh ZmHP301.bin1.fasta NAM-assemblies/Zm-HP301.fasta parsing_coordinates/uniq.zmB73vsZmHP301.bin1.bed
-bash scripts/splitGenomes.sh ZmIL14H.bin1.fasta NAM-assemblies/Zm-IL14H.fasta parsing_coordinates/uniq.zmB73vsZmIL14H.bin1.bed
-bash scripts/splitGenomes.sh ZmKi11.bin1.fasta NAM-assemblies/Zm-Ki11.fasta parsing_coordinates/uniq.zmB73vsZmKi11.bin1.bed
-bash scripts/splitGenomes.sh ZmKi3.bin1.fasta NAM-assemblies/Zm-Ki3.fasta parsing_coordinates/uniq.zmB73vsZmKi3.bin1.bed
-bash scripts/splitGenomes.sh ZmKy21.bin1.fasta NAM-assemblies/Zm-Ky21.fasta parsing_coordinates/uniq.zmB73vsZmKy21.bin1.bed
-bash scripts/splitGenomes.sh ZmM162W.bin1.fasta NAM-assemblies/Zm-M162W.fasta parsing_coordinates/uniq.zmB73vsZmM162W.bin1.bed
-bash scripts/splitGenomes.sh ZmM37W.bin1.fasta NAM-assemblies/Zm-M37W.fasta parsing_coordinates/uniq.zmB73vsZmM37W.bin1.bed
-bash scripts/splitGenomes.sh ZmMo18W.bin1.fasta NAM-assemblies/Zm-Mo18W.fasta parsing_coordinates/uniq.zmB73vsZmMo18W.bin1.bed
-bash scripts/splitGenomes.sh ZmMS71.bin1.fasta NAM-assemblies/Zm-MS71.fasta parsing_coordinates/uniq.zmB73vsZmMS71.bin1.bed
-bash scripts/splitGenomes.sh ZmNC350.bin1.fasta NAM-assemblies/Zm-NC350.fasta parsing_coordinates/uniq.zmB73vsZmNC350.bin1.bed 
-bash scripts/splitGenomes.sh ZmNC358.bin1.fasta NAM-assemblies/Zm-NC358.fasta parsing_coordinates/uniq.zmB73vsZmNC358.bin1.bed
-bash scripts/splitGenomes.sh ZmOh43.bin1.fasta NAM-assemblies/Zm-Oh43.fasta parsing_coordinates/uniq.zmB73vsZmOh43.bin1.bed
-bash scripts/splitGenomes.sh ZmOh7b.bin1.fasta NAM-assemblies/Zm-Oh7b.fasta parsing_coordinates/uniq.zmB73vsZmOh7b.bin1.bed
-bash scripts/splitGenomes.sh ZmP39.bin1.fasta NAM-assemblies/Zm-P39.fasta parsing_coordinates/uniq.zmB73vsZmP39.bin1.bed
-bash scripts/splitGenomes.sh ZmTx303.bin1.fasta NAM-assemblies/Zm-Tx303.fasta parsing_coordinates/uniq.zmB73vsZmTx303.bin1.bed
-bash scripts/splitGenomes.sh ZmTzi8.bin1.fasta NAM-assemblies/Zm-Tzi8.fasta parsing_coordinates/uniq.zmB73vsZmTzi8.bin1.bed
-
-bash scripts/splitGenomes.sh ZdMomo.bin2.fasta assemblies_final/Zd-Momo-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZdMomo.bin2.bed
-bash scripts/splitGenomes.sh ZhRIMHU001.bin2.fasta assemblies_final/Zh-RIMHU001-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZhRIMHU001.bin2.bed
-bash scripts/splitGenomes.sh ZnPI615697.bin2.fasta assemblies_final/Zn-PI615697-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZnPI615697.bin2.bed
-bash scripts/splitGenomes.sh ZvTIL01.bin2.fasta assemblies_final/Zv-TIL01-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZvTIL01.bin2.bed
-bash scripts/splitGenomes.sh ZvTIL11.bin2.fasta assemblies_final/Zv-TIL11-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZvTIL11.bin2.bed
-bash scripts/splitGenomes.sh ZxTIL18.bin2.fasta assemblies_final/Zx-TIL18-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZxTIL18.bin2.bed
-bash scripts/splitGenomes.sh ZxTIL25.bin2.fasta assemblies_final/Zx-TIL25-REFERENCE-PanAnd-1.0.fasta parsing_coordinates/uniq.zmB73vsZxTIL25.bin2.bed
-bash scripts/splitGenomes.sh ZmB73.bin2.fasta NAM-assemblies/Zm-B73.fasta parsing_coordinates/uniq.zmB73vsZmB73.bin2.bed      
-bash scripts/splitGenomes.sh ZmB97.bin2.fasta NAM-assemblies/Zm-B97.fasta parsing_coordinates/uniq.zmB73vsZmB97.bin2.bed      
-bash scripts/splitGenomes.sh ZmCML103.bin2.fasta NAM-assemblies/Zm-CML103.fasta parsing_coordinates/uniq.zmB73vsZmCML103.bin2.bed   
-bash scripts/splitGenomes.sh ZmCML228.bin2.fasta NAM-assemblies/Zm-CML228.fasta parsing_coordinates/uniq.zmB73vsZmCML228.bin2.bed    
-bash scripts/splitGenomes.sh ZmCML247.bin2.fasta NAM-assemblies/Zm-CML247.fasta parsing_coordinates/uniq.zmB73vsZmCML247.bin2.bed    
-bash scripts/splitGenomes.sh ZmCML277.bin2.fasta NAM-assemblies/Zm-CML277.fasta parsing_coordinates/uniq.zmB73vsZmCML277.bin2.bed    
-bash scripts/splitGenomes.sh ZmCML322.bin2.fasta NAM-assemblies/Zm-CML322.fasta parsing_coordinates/uniq.zmB73vsZmCML322.bin2.bed   
-bash scripts/splitGenomes.sh ZmCML333.bin2.fasta NAM-assemblies/Zm-CML333.fasta parsing_coordinates/uniq.zmB73vsZmCML333.bin2.bed    
-bash scripts/splitGenomes.sh ZmCML52.bin2.fasta NAM-assemblies/Zm-CML52.fasta parsing_coordinates/uniq.zmB73vsZmCML52.bin2.bed 
-bash scripts/splitGenomes.sh ZmCML69.bin2.fasta NAM-assemblies/Zm-CML69.fasta parsing_coordinates/uniq.zmB73vsZmCML69.bin2.bed
-bash scripts/splitGenomes.sh ZmHP301.bin2.fasta NAM-assemblies/Zm-HP301.fasta parsing_coordinates/uniq.zmB73vsZmHP301.bin2.bed
-bash scripts/splitGenomes.sh ZmIL14H.bin2.fasta NAM-assemblies/Zm-IL14H.fasta parsing_coordinates/uniq.zmB73vsZmIL14H.bin2.bed
-bash scripts/splitGenomes.sh ZmKi11.bin2.fasta NAM-assemblies/Zm-Ki11.fasta parsing_coordinates/uniq.zmB73vsZmKi11.bin2.bed
-bash scripts/splitGenomes.sh ZmKi3.bin2.fasta NAM-assemblies/Zm-Ki3.fasta parsing_coordinates/uniq.zmB73vsZmKi3.bin2.bed
-bash scripts/splitGenomes.sh ZmKy21.bin2.fasta NAM-assemblies/Zm-Ky21.fasta parsing_coordinates/uniq.zmB73vsZmKy21.bin2.bed
-bash scripts/splitGenomes.sh ZmM162W.bin2.fasta NAM-assemblies/Zm-M162W.fasta parsing_coordinates/uniq.zmB73vsZmM162W.bin2.bed
-bash scripts/splitGenomes.sh ZmM37W.bin2.fasta NAM-assemblies/Zm-M37W.fasta parsing_coordinates/uniq.zmB73vsZmM37W.bin2.bed
-bash scripts/splitGenomes.sh ZmMo18W.bin2.fasta NAM-assemblies/Zm-Mo18W.fasta parsing_coordinates/uniq.zmB73vsZmMo18W.bin2.bed
-bash scripts/splitGenomes.sh ZmMS71.bin2.fasta NAM-assemblies/Zm-MS71.fasta parsing_coordinates/uniq.zmB73vsZmMS71.bin2.bed
-bash scripts/splitGenomes.sh ZmNC350.bin2.fasta NAM-assemblies/Zm-NC350.fasta parsing_coordinates/uniq.zmB73vsZmNC350.bin2.bed 
-bash scripts/splitGenomes.sh ZmNC358.bin2.fasta NAM-assemblies/Zm-NC358.fasta parsing_coordinates/uniq.zmB73vsZmNC358.bin2.bed
-bash scripts/splitGenomes.sh ZmOh43.bin2.fasta NAM-assemblies/Zm-Oh43.fasta parsing_coordinates/uniq.zmB73vsZmOh43.bin2.bed
-bash scripts/splitGenomes.sh ZmOh7b.bin2.fasta NAM-assemblies/Zm-Oh7b.fasta parsing_coordinates/uniq.zmB73vsZmOh7b.bin2.bed
-bash scripts/splitGenomes.sh ZmP39.bin2.fasta NAM-assemblies/Zm-P39.fasta parsing_coordinates/uniq.zmB73vsZmP39.bin2.bed
-bash scripts/splitGenomes.sh ZmTx303.bin2.fasta NAM-assemblies/Zm-Tx303.fasta parsing_coordinates/uniq.zmB73vsZmTx303.bin2.bed
-bash scripts/splitGenomes.sh ZmTzi8.bin2.fasta NAM-assemblies/Zm-Tzi8.fasta parsing_coordinates/uniq.zmB73vsZmTzi8.bin2.bed
-
-```
-Double check that there weren't any typos above
-
-```
-#check the md5sum and make sure there are as many unique sums as there are files
-md5sum *.fasta | cut -f 1 -d " " | sort | uniq | wc -l
-
-ls *.fasta | wc -l 
-```
-They should both be 70!
-
-#Running AnchorWave on the split query genomes
+#Running AnchorWave 
 AnchorWave requires:
 - Reference (Sorghum) assembly fasta
 - Reference (Sorghum) gene gff3
@@ -2095,52 +3216,7 @@ singularity exec --bind $PWD anchorwave.sif anchorwave gff2seq \
 	-o Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa #output file of longest CDS/exon for each gene
 ```
 
-##Step 2: mapping with minimap2 to get anchorpoints
-Script: `slurm_02.minimapAnchorPoints.sh` and `02.minimapAnchorPoints.sh` (the if statement has weird colors in vi, not sure if it'll run...)
-Time to Run: 00:01:29:00 ish
 
-Make a directory for the sam files to go to: 
-```
-mkdir sam_files
-```
-And make a softlink for the Av genome to the split genomes file
-```
-ln -s /work/LAS/mhufford-lab/snodgras/Fractionation/assemblies_final/Av-Kellogg1287_8-REFERENCE-PanAnd-1.0.fasta split_genome_assemblies/Av.fasta
-```
-```bash script
-FILE1=$1 #Genomic fasta file ID for maize genome (genomeID)) (example: Zm-B73-REFERENCE-NAM-5.0); be sure to make certain the fasta file extension in the script matches user file extension i.e. '.fasta' vs '.fa', etc)
-FileName=${FILE1#split_genome_assemblies/}
-ml minimap2
-
-#Do I need to redo the minimap to sorghum to itself everytime? Could cut down with a if file exists exemption
-if [[ ! -f "sam_files/Sb313.ref.sam" ]] ; then
-	minimap2 \
-		-x splice \
-		-t 11 \
-		-k 12 \
-		-a \
-		-p 0.4 \
-		-N 20 \
-		Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \
-		Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > sam_files/Sb313.ref.sam
-fi
-
-minimap2 \
-	-x splice \ #Applies multiple options at once: long-read spliced alignment; long deletions are taken as introns and represented as "n" in CIGAR, long insertions are disabled, indel gap costs are different during chaining; computing 'ms' tag ignores introns to demote hits to pseudogenes
-	-t 11 \ #threads
-	-k 12 \ #minimizer k-mer length
-	-a \ #generate CIGAR and ouput alignmnets in SAM format
-	-p 0.4 \ #Minimal secondary-to-primary score ratio to output secondary mappings
-	-N 20 \ #Output at most INT secondary alignments
-	${FILE1} \ #target fasta
-	Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa > sam_files/${FileName%.fasta}_Sb313.cds.sam #query fasta and output file
-```
-
-```slurm script
-for i in split_genome_assemblies/*.fasta ; do
-        bash /work/LAS/mhufford-lab/snodgras/Fractionation/scripts/02.minimapAnchorPoints.sh ${i}
-;done
-```
 
 ##Step 3: Anchorwave Alignment
 Running Anchorwave will take ~8 hours without -f and ~24 hours with -f
@@ -2151,137 +3227,7 @@ Timed out after 12 hours
 -s = target genome sequence (-Q = query max alignment coverage 
 
 
-```scripts/03.AnchorWaveAlignment.sh
-FILE1=$1
-FileName=${FILE1#split_genome_assemblies/}
-ml singularity
-singularity exec --bind $PWD anchorwave.sif anchorwave proali \
-	-i Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.1.gene.gff3 \ 
-	-as Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0_cds.fa \
-	-r Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa \ 
-	-a sam_files/${FileName}_Sb313.cds.sam \ 
-	-ar sam_files/Sb313.ref.sam \ 
-	-s ${FILE1}.fasta \ 
-	-n AnchorWave_output/Sb313_${FileName}_anchorwave.anchors \ 
-	-R 1 \ 
-	-Q 1 \
-	-o AnchorWave_output/Sb313_${FileName}_anchorwave.maf \ 
-	-t 5 > AnchorWave_logs/Sb313_${FileName}_anchorwave.log 2>&1 
-####
-#slurm job
-#!/bin/bash
 
-# Copy/paste this job script into a text file and submit with the command:
-#    sbatch thefilename
-# job standard output will go to the file slurm-%j.out (where %j is the job ID)
-
-#SBATCH --time=48:00:00   # walltime limit (HH:MM:SS)
-#SBATCH --nodes=1   # number of nodes
-#SBATCH --ntasks-per-node=36   # 36 processor core(s) per node 
-#SBATCH --mem=369G   # maximum memory per node
-#SBATCH --job-name="AnchorWaveAlignment"
-#SBATCH --mail-user=snodgras@iastate.edu   # email address
-#SBATCH --mail-type=BEGIN
-#SBATCH --mail-type=END
-#SBATCH --mail-type=FAIL
-#SBATCH --exclusive
-
-bash scripts/03.AnchorWaveAlignment.sh assemblies_final/Zv-TIL01-Reference-PanAnd-2.0
-```
-To make multiple slurm scripts for parallel job submission
-```
-for i in split_genome_assemblies/*.fasta ; do
-	echo bash scripts/03.AnchorWaveAlignment.sh ${i%.fasta} >> scripts/AnchorWave.cmds.txt
-done
-python makeSLURM.py 1 AnchorWave.cmds.txt
-```
-
-```
-#but to set the other ones up to run if it completes ok
-for i in {1..70}; do
-	sbatch --dependency=afterok:4695887 scripts/AnchorWave.cmds_${i}.sub ;
-done
-```
-***RAN OUT OF ROOM IN WORK/LAS/ SO I'M RUNNING EVERY JOB AFTER 22 IN PTMP*
-```
-cd /ptmp/LAS/snodgras/
-ln -s /work/LAS/mhufford-lab/snodgras/Fractionation/ .
-
-for i in {23..70} ; do sbatch scripts/AnchorWave.cmds_${i}.sub ; done
-```
-
-##Step 4: convert MAF to GVCF formats
-Will need anchorwave and tassel to run
-scripts below: `04.maf2gvcf.sh`
-It also requires the phg singularity
-```
-#phg singularity installation
-module use /opt/rit/spack-modules/lmod/linux-rhel7-x86_64/Core/
-module load singularity
-singularity pull --name phg_latest.sif docker://maizegenetics/phg
-```
-```
-REFfasta=$1 #Sorghum genome fasta
-REFname=$2 #query name without extensions
-
-##Convert maf to gvcf (this takes about 15 or so minutes):
-
-#MAFToGVCFPlugin <options>
-#-referenceFasta <Reference Fasta> : Input Reference Fasta (required)
-#-mafFile <Maf File> : Input MAF file.  Please note that this needs to be a MAF file with 2 samples.  The first will be assumed to be the Reference and the second will be the assembly. (required)
-#-sampleName <Sample Name> : Sample Name to write to the GVCF file as the genome header or ID (required)
-#-gvcfOutput <Gvcf Output> : Output GVCF file name (required)
-#-fillGaps <true | false> : When true, if the maf file does not fully cover the reference genome any gaps in coverage will be #filled in with reference blocks. This is necessary if the resulting GVCFs are to be combined. (Default: false)
-
-module load singularity
-singularity exec phg_latest.sif /tassel-5-standalone/run_pipeline.pl \
-	-Xmx300g \
-	-MAFToGVCFPlugin \
-	-referenceFasta ${REFfasta} \
-	-mafFile Sb313_${REFname}_anchorwave.maf \
-	-sampleName Sb313_${REFname} \
-	-gvcfOutput Sb313_${REFname}_anchorwave.gvcf \
-	-fillGaps true
-
-##The command "-Xmx300g" demands that Java has enough RAM for the job to be run; in this case, 300g
-
-###RUN IN /AnchorWave_output/
-
-#SLURM COMMAND
-#!/bin/bash
-
-# Copy/paste this job script into a text file and submit with the command:
-#    sbatch thefilename
-# job standard output will go to the file slurm-%j.out (where %j is the job ID)
-
-#SBATCH --time=00:30:00   # walltime limit (HH:MM:SS)
-#SBATCH --nodes=1   # number of nodes
-#SBATCH --ntasks-per-node=36   # 36 processor core(s) per node 
-#SBATCH --mem=369G   # maximum memory per node
-#SBATCH --job-name="MAF2GVCF"
-#SBATCH --mail-user=snodgras@iastate.edu   # email address
-#SBATCH --mail-type=BEGIN
-#SBATCH --mail-type=END
-#SBATCH --mail-type=FAIL
-
-bash /ptmp/LAS/snodgras/Fractionation/scripts/04.maf2gvcf.sh /ptmp/LAS/snodgras/Fractionation/Sbicolor_313/Sbicolor_313_v3.1/Sbicolor_313_v3.0.fa Av 
-```
-`sbatch ../scripts/slurm_04.maf2gvcf.sh`
-
-To make it run parallel
-```
-for i in *bin*.maf ; do
-	n=$(echo $i | cut -f 2 -d "_") 
-	echo bash /ptmp/LAS/snodgras/Fractionation/scripts/04.maf2gvcf.sh /ptmp/LAS/snodgras/Fractionation/Sb313.fasta ${n} >> ../scripts/maf2gvcf.cmds.txt
-done
-cd ../scripts/
-#edit makeSLURM.py to be only 1 hour of wall time
-python makeSLURM.py 1 maf2gvcf.cmds.txt
-cd -
-for i in ../scripts/maf2gvcf*.sub ; do sbatch $i ;done
-```
-
-I had to copy the sb313 fasta again because it was saying it couldn't find it when running the slurm
 
 ##Step 5: Trimming GVCF with GATK
 Original code from Elena Jiang, altered by Samantha Snodgrass
@@ -2450,40 +3396,6 @@ gatk --java-options "-Xmx50g" GenotypeGVCFs \
 -V gendb://chr1_gatkDBimport \
 --cloud-prefetch-buffer 10000 --cloud-index-prefetch-buffer 10000 --genomicsdb-max-alternate-alleles 110 --max-alternate-alleles 100 --gcs-max-retries 1000 \
 -O chr1.vcf
-```
-*ERRORS*
-For Chr01, it said some of the -V arguments were not positional
-- checked for extra spaces after the `\`
-- checked to make sure that there were Chr01 coordinates in the maf
-```
-for i in ZdGigi.bin2 ZmCML103.bin2 ZmCML333.bin1 ZmKi3.bin1 ; do grep "Chr01" Sb313_${i}_anchorwave.maf | wc -l ; done
-0
-0
-11
-6
-```
-- Try the script with only 3 -V (Av and the two bins for TdFL)
-
-Make one slurm script for each chromosome, changing the 
-- reference fasta name
-- L option
-- workspace path
-- vcf V option
-- vcf O option
-
-```
-for i in 02 03 04 05 06 07 08 09 10 ; do cp slurm_06.01.gvcf2vcf.sh slurm_06.${i}.gvcf2vcf.sh; done
-sed -i 's/chr1/chr2/g' slurm_06.02.gvcf2vcf.sh
-sed -i 's/chr1/chr3/g' slurm_06.03.gvcf2vcf.sh
-sed -i 's/chr1/chr4/g' slurm_06.04.gvcf2vcf.sh
-sed -i 's/chr1/chr5/g' slurm_06.05.gvcf2vcf.sh
-sed -i 's/chr1/chr6/g' slurm_06.06.gvcf2vcf.sh
-sed -i 's/chr1/chr7/g' slurm_06.07.gvcf2vcf.sh
-sed -i 's/chr1/chr8/g' slurm_06.08.gvcf2vcf.sh
-sed -i 's/chr1/chr9/g' slurm_06.09.gvcf2vcf.sh
-sed -i 's/chr1/chr10/g' slurm_06.10.gvcf2vcf.sh
-
-#manually change -L
 ```
 
 
