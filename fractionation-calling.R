@@ -893,6 +893,7 @@ full.fractionation.status<-full.fractionation.status %>%
 
 gene_id<-select(full.fractionation.status, Gene_ID) %>% pull() %>% unique()
 
+####Gene Fractionation####
 #Start making gene fractionation status by summing the statuses for each exon for a given gene
 #sum will be # of exons that are called fractionated for a given gene
 gene_fractionation<-tibble(Gene_ID=NA, TdFL.M1.sum=NA,TdFL.M2.sum=NA,ZdGigi.M1.sum=NA,ZdGigi.M2.sum=NA,  
@@ -947,509 +948,282 @@ for(i in 1:length(gene_id)){
 ##  }}
 ##}
 
-for(g in 1:length(tripsacinae_genome_IDs)){
-  gene_fractionation[,paste0(tripsacinae_genome_IDs[g],".M1")]<-NA
-  for(i in 1:nrow(gene_fractionation)){
-    if(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1.sum")] > 0 & !is.na(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1.sum")])){
-      gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1")]<-1 
-    }else{if(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1.sum")] == 0 & !is.na(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1.sum")])){
-      gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M1")]<-0 
-    }}
+
+#This way calculates other cutoffs as well
+#if just 1 exon is fractionated (only1)
+#if 1/3 of exons are fractionated
+#if 1/2 of exons are fractionated
+#if all exons are fractionated
+
+gene_fractionation<-left_join(x=gene_fractionation, y=ref_gene_list, by=c("Gene_ID"="GeneID_Sb313"))
+
+for(g in tripsacinae_genome_IDs){
+  #create new columns for each cutoff for fractionation calling
+  gene_fractionation[,paste0(g,".M1.only1")]<-NA
+  gene_fractionation[,paste0(g,".M1.third")]<-NA
+  gene_fractionation[,paste0(g,".M1.half")]<-NA
+  gene_fractionation[,paste0(g,".M1.all")]<-NA
+  for(i in 1:nrow(gene_fractionation)){ #for each gene
+    #if the sum is greater than 0 and none is NA for a genome M1
+    if(gene_fractionation[i,paste0(g,".M1.sum")] > 0 & !is.na(gene_fractionation[i,paste0(g,".M1.sum")])){
+      #at least 1 ("only1") cutoff is satisfied
+      gene_fractionation[i,paste0(g,".M1.only1")]<-1
+      #if that sum is the total number of exons for that gene, the rest of the cutoffs are also satisfied
+      if(gene_fractionation[i,paste0(g,".M1.sum")]/gene_fractionation[i,"ExonCnt"] == 1){
+        gene_fractionation[i,paste0(g,".M1.third")]<-1
+        gene_fractionation[i,paste0(g,".M1.half")]<-1
+        gene_fractionation[i,paste0(g,".M1.all")]<-1
+      }else{ #otherwise if the proportion is greater than 0.5 but not all, then half and third are satisfied
+        if(gene_fractionation[i,paste0(g,".M1.sum")]/gene_fractionation[i,"ExonCnt"] >= 0.5){
+          gene_fractionation[i,paste0(g,".M1.third")]<-1
+          gene_fractionation[i,paste0(g,".M1.half")]<-1
+          gene_fractionation[i,paste0(g,".M1.all")]<-0
+        }else{#otherwise if the proportion is greater than 0.333 but not above 0.5, then third is satisified
+          if(gene_fractionation[i,paste0(g,".M1.sum")]/gene_fractionation[i,"ExonCnt"] >= 0.333){
+          gene_fractionation[i,paste0(g,".M1.third")]<-1
+          gene_fractionation[i,paste0(g,".M1.half")]<-0
+          gene_fractionation[i,paste0(g,".M1.all")]<-0
+          }else{ #if less than 0.333, then no other cutoff is satisfied
+            gene_fractionation[i,paste0(g,".M1.third")]<-0
+            gene_fractionation[i,paste0(g,".M1.half")]<-0
+            gene_fractionation[i,paste0(g,".M1.all")]<-0
+          }
+        }
+      }
+    }
+    else{# if the sum is not greater than 1 and none NA, then
+      #if the sum is 0 and there's no NA, it's retained and no fractionation cutoff is satisfied
+      if(gene_fractionation[i,paste0(g,".M1.sum")] == 0 & !is.na(gene_fractionation[i,paste0(g,".M1.sum")])){
+      gene_fractionation[i,paste0(g,".M1.only1")]<-0 
+      gene_fractionation[i,paste0(g,".M1.third")]<-0
+      gene_fractionation[i,paste0(g,".M1.half")]<-0
+      gene_fractionation[i,paste0(g,".M1.all")]<-0
+      }
+      }
   }
 }
 
-for(g in 1:length(tripsacinae_genome_IDs)){
-  gene_fractionation[,paste0(tripsacinae_genome_IDs[g],".M2")]<-NA
-  for(i in 1:nrow(gene_fractionation)){
-    if(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2.sum")] > 0 & !is.na(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2.sum")])){
-      gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2")]<-1 
-    }else{if(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2.sum")] == 0 & !is.na(gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2.sum")])){
-      gene_fractionation[i,paste0(tripsacinae_genome_IDs[g],".M2")]<-0 
-    }}
+#repeat for M2
+for(g in tripsacinae_genome_IDs){
+  #create new columns for each cutoff for fractionation calling
+  gene_fractionation[,paste0(g,".M2.only1")]<-NA
+  gene_fractionation[,paste0(g,".M2.third")]<-NA
+  gene_fractionation[,paste0(g,".M2.half")]<-NA
+  gene_fractionation[,paste0(g,".M2.all")]<-NA
+  for(i in 1:nrow(gene_fractionation)){ #for each gene
+    #if the sum is greater than 0 and none is NA for a genome M2
+    if(gene_fractionation[i,paste0(g,".M2.sum")] > 0 & !is.na(gene_fractionation[i,paste0(g,".M2.sum")])){
+      #at least 1 ("only1") cutoff is satisfied
+      gene_fractionation[i,paste0(g,".M2.only1")]<-1
+      #if that sum is the total number of exons for that gene, the rest of the cutoffs are also satisfied
+      if(gene_fractionation[i,paste0(g,".M2.sum")]/gene_fractionation[i,"ExonCnt"] == 1){
+        gene_fractionation[i,paste0(g,".M2.third")]<-1
+        gene_fractionation[i,paste0(g,".M2.half")]<-1
+        gene_fractionation[i,paste0(g,".M2.all")]<-1
+      }else{ #otherwise if the proportion is greater than 0.5 but not all, then half and third are satisfied
+        if(gene_fractionation[i,paste0(g,".M2.sum")]/gene_fractionation[i,"ExonCnt"] >= 0.5){
+          gene_fractionation[i,paste0(g,".M2.third")]<-1
+          gene_fractionation[i,paste0(g,".M2.half")]<-1
+          gene_fractionation[i,paste0(g,".M2.all")]<-0
+        }else{#otherwise if the proportion is greater than 0.333 but not above 0.5, then third is satisified
+          if(gene_fractionation[i,paste0(g,".M2.sum")]/gene_fractionation[i,"ExonCnt"] >= 0.333){
+            gene_fractionation[i,paste0(g,".M2.third")]<-1
+            gene_fractionation[i,paste0(g,".M2.half")]<-0
+            gene_fractionation[i,paste0(g,".M2.all")]<-0
+          }else{ #if less than 0.333, then no other cutoff is satisfied
+            gene_fractionation[i,paste0(g,".M2.third")]<-0
+            gene_fractionation[i,paste0(g,".M2.half")]<-0
+            gene_fractionation[i,paste0(g,".M2.all")]<-0
+          }
+        }
+      }
+    }
+    else{# if the sum is not greater than 1 and none NA, then
+      #if the sum is 0 and there's no NA, it's retained and no fractionation cutoff is satisfied
+      if(gene_fractionation[i,paste0(g,".M2.sum")] == 0 & !is.na(gene_fractionation[i,paste0(g,".M2.sum")])){
+        gene_fractionation[i,paste0(g,".M2.only1")]<-0 
+        gene_fractionation[i,paste0(g,".M2.third")]<-0
+        gene_fractionation[i,paste0(g,".M2.half")]<-0
+        gene_fractionation[i,paste0(g,".M2.all")]<-0
+      }
+    }
   }
 }
 
-gene_fractionation<-gene_fractionation %>% mutate(TdFL.status = case_when(TdFL.M1 == 0 & TdFL.M2 == 0 ~ "Both_Retained",
-                                                                          TdFL.M1 == 1 & TdFL.M2 == 0 ~ "M2_Retained",
-                                                                          TdFL.M1 == 0 & TdFL.M2 == 1 ~ "M1_Retained",
-                                                                          TdFL.M1 == 1 & TdFL.M2 == 1 ~ "Both_Lost",
-                                                                          TdFL.M1 == 1 & is.na(TdFL.M2) ~ "M1_Lost:M2_NA",
-                                                                          TdFL.M1 == 0 & is.na(TdFL.M2) ~ "M1_Retained:M2_NA",
-                                                                          is.na(TdFL.M1) & TdFL.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                          is.na(TdFL.M1) & TdFL.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                          is.na(TdFL.M1) & is.na(TdFL.M2) ~ "Both_NA"),
-                                                  
-                                                  TdKS.status = case_when(TdKS.M1 == 0 & TdKS.M2 == 0 ~ "Both_Retained",
-                                                                          TdKS.M1 == 1 & TdKS.M2 == 0 ~ "M2_Retained",
-                                                                          TdKS.M1 == 0 & TdKS.M2 == 1 ~ "M1_Retained",
-                                                                          TdKS.M1 == 1 & TdKS.M2 == 1 ~ "Both_Lost",
-                                                                          TdKS.M1 == 1 & is.na(TdKS.M2) ~ "M1_Lost:M2_NA",
-                                                                          TdKS.M1 == 0 & is.na(TdKS.M2) ~ "M1_Retained:M2_NA",
-                                                                          is.na(TdKS.M1) & TdKS.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                          is.na(TdKS.M1) & TdKS.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                          is.na(TdKS.M1) & is.na(TdKS.M2) ~ "Both_NA"),
-                                                  
-                                                  ZdGigi_4to1.status = case_when(ZdGigi_4to1.M1 == 0 & ZdGigi_4to1.M2 == 0 ~ "Both_Retained",
-                                                                                 ZdGigi_4to1.M1 == 1 & ZdGigi_4to1.M2 == 0 ~ "M2_Retained",
-                                                                          ZdGigi_4to1.M1 == 0 & ZdGigi_4to1.M2 == 1 ~ "M1_Retained",
-                                                                          ZdGigi_4to1.M1 == 1 & ZdGigi_4to1.M2 == 1 ~ "Both_Lost",
-                                                                          ZdGigi_4to1.M1 == 1 & is.na(ZdGigi_4to1.M2) ~ "M1_Lost:M2_NA",
-                                                                          ZdGigi_4to1.M1 == 0 & is.na(ZdGigi_4to1.M2) ~ "M1_Retained:M2_NA",
-                                                                          is.na(ZdGigi_4to1.M1) & ZdGigi_4to1.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                          is.na(ZdGigi_4to1.M1) & ZdGigi_4to1.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                          is.na(ZdGigi_4to1.M1) & is.na(ZdGigi_4to1.M2) ~ "Both_NA"),
-                                                  
-                                                  ZdMomo_4to1.status = case_when(ZdMomo_4to1.M1 == 0 & ZdMomo_4to1.M2 == 0 ~ "Both_Retained",
-                                                                                 ZdMomo_4to1.M1 == 1 & ZdMomo_4to1.M2 == 0 ~ "M2_Retained",
-                                                                                 ZdMomo_4to1.M1 == 0 & ZdMomo_4to1.M2 == 1 ~ "M1_Retained",
-                                                                                 ZdMomo_4to1.M1 == 1 & ZdMomo_4to1.M2 == 1 ~ "Both_Lost",
-                                                                                 ZdMomo_4to1.M1 == 1 & is.na(ZdMomo_4to1.M2) ~ "M1_Lost:M2_NA",
-                                                                                 ZdMomo_4to1.M1 == 0 & is.na(ZdMomo_4to1.M2) ~ "M1_Retained:M2_NA",
-                                                                          is.na(ZdMomo_4to1.M1) & ZdMomo_4to1.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                          is.na(ZdMomo_4to1.M1) & ZdMomo_4to1.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                          is.na(ZdMomo_4to1.M1) & is.na(ZdMomo_4to1.M2) ~ "Both_NA"),
-                                                  
-                                                  ZnPI615697_4to1.status = case_when(ZnPI615697_4to1.M1 == 0 & ZnPI615697_4to1.M2 == 0 ~ "Both_Retained",
-                                                                                     ZnPI615697_4to1.M1 == 1 & ZnPI615697_4to1.M2 == 0 ~ "M2_Retained",
-                                                                                     ZnPI615697_4to1.M1 == 0 & ZnPI615697_4to1.M2 == 1 ~ "M1_Retained",
-                                                                                     ZnPI615697_4to1.M1 == 1 & ZnPI615697_4to1.M2 == 1 ~ "Both_Lost",
-                                                                                     ZnPI615697_4to1.M1 == 1 & is.na(ZnPI615697_4to1.M2) ~ "M1_Lost:M2_NA",
-                                                                                     ZnPI615697_4to1.M1 == 0 & is.na(ZnPI615697_4to1.M2) ~ "M1_Retained:M2_NA",
-                                                                          is.na(ZnPI615697_4to1.M1) & ZnPI615697_4to1.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                          is.na(ZnPI615697_4to1.M1) & ZnPI615697_4to1.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                          is.na(ZnPI615697_4to1.M1) & is.na(ZnPI615697_4to1.M2) ~ "Both_NA"),
-                                                  
-                                                  ZdGigi.status = case_when(ZdGigi.M1 == 0 & ZdGigi.M2 == 0 ~ "Both_Retained",
-                                                                            ZdGigi.M1 == 1 & ZdGigi.M2 == 0 ~ "M2_Retained",
-                                                                            ZdGigi.M1 == 0 & ZdGigi.M2 == 1 ~ "M1_Retained",
-                                                                            ZdGigi.M1 == 1 & ZdGigi.M2 == 1 ~ "Both_Lost",
-                                                                            ZdGigi.M1 == 1 & is.na(ZdGigi.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZdGigi.M1 == 0 & is.na(ZdGigi.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZdGigi.M1) & ZdGigi.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZdGigi.M1) & ZdGigi.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZdGigi.M1) & is.na(ZdGigi.M2) ~ "Both_NA"),
-                                                  
-                                                  ZdMomo.status = case_when(ZdMomo.M1 == 0 & ZdMomo.M2 == 0 ~ "Both_Retained",
-                                                                            ZdMomo.M1 == 1 & ZdMomo.M2 == 0 ~ "M2_Retained",
-                                                                            ZdMomo.M1 == 0 & ZdMomo.M2 == 1 ~ "M1_Retained",
-                                                                            ZdMomo.M1 == 1 & ZdMomo.M2 == 1 ~ "Both_Lost",
-                                                                            ZdMomo.M1 == 1 & is.na(ZdMomo.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZdMomo.M1 == 0 & is.na(ZdMomo.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZdMomo.M1) & ZdMomo.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZdMomo.M1) & ZdMomo.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZdMomo.M1) & is.na(ZdMomo.M2) ~ "Both_NA"),
-                                                  
-                                                  ZhRIMHU001.status = case_when(ZhRIMHU001.M1 == 0 & ZhRIMHU001.M2 == 0 ~ "Both_Retained",
-                                                                                ZhRIMHU001.M1 == 1 & ZhRIMHU001.M2 == 0 ~ "M2_Retained",
-                                                                                ZhRIMHU001.M1 == 0 & ZhRIMHU001.M2 == 1 ~ "M1_Retained",
-                                                                                ZhRIMHU001.M1 == 1 & ZhRIMHU001.M2 == 1 ~ "Both_Lost",
-                                                                                ZhRIMHU001.M1 == 1 & is.na(ZhRIMHU001.M2) ~ "M1_Lost:M2_NA",
-                                                                                ZhRIMHU001.M1 == 0 & is.na(ZhRIMHU001.M2) ~ "M1_Retained:M2_NA",
-                                                                                is.na(ZhRIMHU001.M1) & ZhRIMHU001.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                                is.na(ZhRIMHU001.M1) & ZhRIMHU001.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                                is.na(ZhRIMHU001.M1) & is.na(ZhRIMHU001.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmB73.status = case_when(ZmB73.M1 == 0 & ZmB73.M2 == 0 ~ "Both_Retained",
-                                                                           ZmB73.M1 == 1 & ZmB73.M2 == 0 ~ "M2_Retained",
-                                                                           ZmB73.M1 == 0 & ZmB73.M2 == 1 ~ "M1_Retained",
-                                                                           ZmB73.M1 == 1 & ZmB73.M2 == 1 ~ "Both_Lost",
-                                                                           ZmB73.M1 == 1 & is.na(ZmB73.M2) ~ "M1_Lost:M2_NA",
-                                                                           ZmB73.M1 == 0 & is.na(ZmB73.M2) ~ "M1_Retained:M2_NA",
-                                                                           is.na(ZmB73.M1) & ZmB73.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                           is.na(ZmB73.M1) & ZmB73.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                           is.na(ZmB73.M1) & is.na(ZmB73.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmB97.status = case_when(ZmB97.M1 == 0 & ZmB97.M2 == 0 ~ "Both_Retained",
-                                                                           ZmB97.M1 == 1 & ZmB97.M2 == 0 ~ "M2_Retained",
-                                                                           ZmB97.M1 == 0 & ZmB97.M2 == 1 ~ "M1_Retained",
-                                                                           ZmB97.M1 == 1 & ZmB97.M2 == 1 ~ "Both_Lost",
-                                                                           ZmB97.M1 == 1 & is.na(ZmB97.M2) ~ "M1_Lost:M2_NA",
-                                                                           ZmB97.M1 == 0 & is.na(ZmB97.M2) ~ "M1_Retained:M2_NA",
-                                                                           is.na(ZmB97.M1) & ZmB97.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                           is.na(ZmB97.M1) & ZmB97.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                           is.na(ZmB97.M1) & is.na(ZmB97.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML103.status = case_when(ZmCML103.M1 == 0 & ZmCML103.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML103.M1 == 1 & ZmCML103.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML103.M1 == 0 & ZmCML103.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML103.M1 == 1 & ZmCML103.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML103.M1 == 1 & is.na(ZmCML103.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML103.M1 == 0 & is.na(ZmCML103.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML103.M1) & ZmCML103.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML103.M1) & ZmCML103.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML103.M1) & is.na(ZmCML103.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML228.status = case_when(ZmCML228.M1 == 0 & ZmCML228.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML228.M1 == 1 & ZmCML228.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML228.M1 == 0 & ZmCML228.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML228.M1 == 1 & ZmCML228.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML228.M1 == 1 & is.na(ZmCML228.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML228.M1 == 0 & is.na(ZmCML228.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML228.M1) & ZmCML228.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML228.M1) & ZmCML228.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML228.M1) & is.na(ZmCML228.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML247.status = case_when(ZmCML247.M1 == 0 & ZmCML247.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML247.M1 == 1 & ZmCML247.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML247.M1 == 0 & ZmCML247.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML247.M1 == 1 & ZmCML247.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML247.M1 == 1 & is.na(ZmCML247.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML247.M1 == 0 & is.na(ZmCML247.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML247.M1) & ZmCML247.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML247.M1) & ZmCML247.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML247.M1) & is.na(ZmCML247.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML277.status = case_when(ZmCML277.M1 == 0 & ZmCML277.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML277.M1 == 1 & ZmCML277.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML277.M1 == 0 & ZmCML277.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML277.M1 == 1 & ZmCML277.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML277.M1 == 1 & is.na(ZmCML277.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML277.M1 == 0 & is.na(ZmCML277.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML277.M1) & ZmCML277.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML277.M1) & ZmCML277.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML277.M1) & is.na(ZmCML277.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML322.status = case_when(ZmCML322.M1 == 0 & ZmCML322.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML322.M1 == 1 & ZmCML322.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML322.M1 == 0 & ZmCML322.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML322.M1 == 1 & ZmCML322.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML322.M1 == 1 & is.na(ZmCML322.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML322.M1 == 0 & is.na(ZmCML322.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML322.M1) & ZmCML322.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML322.M1) & ZmCML322.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML322.M1) & is.na(ZmCML322.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML333.status = case_when(ZmCML333.M1 == 0 & ZmCML333.M2 == 0 ~ "Both_Retained",
-                                                                              ZmCML333.M1 == 1 & ZmCML333.M2 == 0 ~ "M2_Retained",
-                                                                              ZmCML333.M1 == 0 & ZmCML333.M2 == 1 ~ "M1_Retained",
-                                                                              ZmCML333.M1 == 1 & ZmCML333.M2 == 1 ~ "Both_Lost",
-                                                                              ZmCML333.M1 == 1 & is.na(ZmCML333.M2) ~ "M1_Lost:M2_NA",
-                                                                              ZmCML333.M1 == 0 & is.na(ZmCML333.M2) ~ "M1_Retained:M2_NA",
-                                                                              is.na(ZmCML333.M1) & ZmCML333.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                              is.na(ZmCML333.M1) & ZmCML333.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                              is.na(ZmCML333.M1) & is.na(ZmCML333.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML52.status = case_when(ZmCML52.M1 == 0 & ZmCML52.M2 == 0 ~ "Both_Retained",
-                                                                             ZmCML52.M1 == 1 & ZmCML52.M2 == 0 ~ "M2_Retained",
-                                                                             ZmCML52.M1 == 0 & ZmCML52.M2 == 1 ~ "M1_Retained",
-                                                                             ZmCML52.M1 == 1 & ZmCML52.M2 == 1 ~ "Both_Lost",
-                                                                             ZmCML52.M1 == 1 & is.na(ZmCML52.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmCML52.M1 == 0 & is.na(ZmCML52.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmCML52.M1) & ZmCML52.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmCML52.M1) & ZmCML52.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmCML52.M1) & is.na(ZmCML52.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmCML69.status = case_when(ZmCML69.M1 == 0 & ZmCML69.M2 == 0 ~ "Both_Retained",
-                                                                             ZmCML69.M1 == 1 & ZmCML69.M2 == 0 ~ "M2_Retained",
-                                                                             ZmCML69.M1 == 0 & ZmCML69.M2 == 1 ~ "M1_Retained",
-                                                                             ZmCML69.M1 == 1 & ZmCML69.M2 == 1 ~ "Both_Lost",
-                                                                             ZmCML69.M1 == 1 & is.na(ZmCML69.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmCML69.M1 == 0 & is.na(ZmCML69.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmCML69.M1) & ZmCML69.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmCML69.M1) & ZmCML69.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmCML69.M1) & is.na(ZmCML69.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmHP301.status = case_when(ZmHP301.M1 == 0 & ZmHP301.M2 == 0 ~ "Both_Retained",
-                                                                             ZmHP301.M1 == 1 & ZmHP301.M2 == 0 ~ "M2_Retained",
-                                                                             ZmHP301.M1 == 0 & ZmHP301.M2 == 1 ~ "M1_Retained",
-                                                                             ZmHP301.M1 == 1 & ZmHP301.M2 == 1 ~ "Both_Lost",
-                                                                             ZmHP301.M1 == 1 & is.na(ZmHP301.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmHP301.M1 == 0 & is.na(ZmHP301.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmHP301.M1) & ZmHP301.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmHP301.M1) & ZmHP301.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmHP301.M1) & is.na(ZmHP301.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmIL14H.status = case_when(ZmIL14H.M1 == 0 & ZmIL14H.M2 == 0 ~ "Both_Retained",
-                                                                             ZmIL14H.M1 == 1 & ZmIL14H.M2 == 0 ~ "M2_Retained",
-                                                                             ZmIL14H.M1 == 0 & ZmIL14H.M2 == 1 ~ "M1_Retained",
-                                                                             ZmIL14H.M1 == 1 & ZmIL14H.M2 == 1 ~ "Both_Lost",
-                                                                             ZmIL14H.M1 == 1 & is.na(ZmIL14H.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmIL14H.M1 == 0 & is.na(ZmIL14H.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmIL14H.M1) & ZmIL14H.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmIL14H.M1) & ZmIL14H.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmIL14H.M1) & is.na(ZmIL14H.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmKi11.status = case_when(ZmKi11.M1 == 0 & ZmKi11.M2 == 0 ~ "Both_Retained",
-                                                                            ZmKi11.M1 == 1 & ZmKi11.M2 == 0 ~ "M2_Retained",
-                                                                            ZmKi11.M1 == 0 & ZmKi11.M2 == 1 ~ "M1_Retained",
-                                                                            ZmKi11.M1 == 1 & ZmKi11.M2 == 1 ~ "Both_Lost",
-                                                                            ZmKi11.M1 == 1 & is.na(ZmKi11.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmKi11.M1 == 0 & is.na(ZmKi11.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmKi11.M1) & ZmKi11.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmKi11.M1) & ZmKi11.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmKi11.M1) & is.na(ZmKi11.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmKi3.status = case_when(ZmKi3.M1 == 0 & ZmKi3.M2 == 0 ~ "Both_Retained",
-                                                                           ZmKi3.M1 == 1 & ZmKi3.M2 == 0 ~ "M2_Retained",
-                                                                           ZmKi3.M1 == 0 & ZmKi3.M2 == 1 ~ "M1_Retained",
-                                                                           ZmKi3.M1 == 1 & ZmKi3.M2 == 1 ~ "Both_Lost",
-                                                                           ZmKi3.M1 == 1 & is.na(ZmKi3.M2) ~ "M1_Lost:M2_NA",
-                                                                           ZmKi3.M1 == 0 & is.na(ZmKi3.M2) ~ "M1_Retained:M2_NA",
-                                                                           is.na(ZmKi3.M1) & ZmKi3.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                           is.na(ZmKi3.M1) & ZmKi3.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                           is.na(ZmKi3.M1) & is.na(ZmKi3.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmKy21.status = case_when(ZmKy21.M1 == 0 & ZmKy21.M2 == 0 ~ "Both_Retained",
-                                                                            ZmKy21.M1 == 1 & ZmKy21.M2 == 0 ~ "M2_Retained",
-                                                                            ZmKy21.M1 == 0 & ZmKy21.M2 == 1 ~ "M1_Retained",
-                                                                            ZmKy21.M1 == 1 & ZmKy21.M2 == 1 ~ "Both_Lost",
-                                                                            ZmKy21.M1 == 1 & is.na(ZmKy21.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmKy21.M1 == 0 & is.na(ZmKy21.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmKy21.M1) & ZmKy21.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmKy21.M1) & ZmKy21.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmKy21.M1) & is.na(ZmKy21.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmM162W.status = case_when(ZmM162W.M1 == 0 & ZmM162W.M2 == 0 ~ "Both_Retained",
-                                                                             ZmM162W.M1 == 1 & ZmM162W.M2 == 0 ~ "M2_Retained",
-                                                                             ZmM162W.M1 == 0 & ZmM162W.M2 == 1 ~ "M1_Retained",
-                                                                             ZmM162W.M1 == 1 & ZmM162W.M2 == 1 ~ "Both_Lost",
-                                                                             ZmM162W.M1 == 1 & is.na(ZmM162W.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmM162W.M1 == 0 & is.na(ZmM162W.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmM162W.M1) & ZmM162W.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmM162W.M1) & ZmM162W.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmM162W.M1) & is.na(ZmM162W.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmM37W.status = case_when(ZmM37W.M1 == 0 & ZmM37W.M2 == 0 ~ "Both_Retained",
-                                                                            ZmM37W.M1 == 1 & ZmM37W.M2 == 0 ~ "M2_Retained",
-                                                                            ZmM37W.M1 == 0 & ZmM37W.M2 == 1 ~ "M1_Retained",
-                                                                            ZmM37W.M1 == 1 & ZmM37W.M2 == 1 ~ "Both_Lost",
-                                                                            ZmM37W.M1 == 1 & is.na(ZmM37W.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmM37W.M1 == 0 & is.na(ZmM37W.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmM37W.M1) & ZmM37W.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmM37W.M1) & ZmM37W.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmM37W.M1) & is.na(ZmM37W.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmMo18W.status = case_when(ZmMo18W.M1 == 0 & ZmMo18W.M2 == 0 ~ "Both_Retained",
-                                                                             ZmMo18W.M1 == 1 & ZmMo18W.M2 == 0 ~ "M2_Retained",
-                                                                             ZmMo18W.M1 == 0 & ZmMo18W.M2 == 1 ~ "M1_Retained",
-                                                                             ZmMo18W.M1 == 1 & ZmMo18W.M2 == 1 ~ "Both_Lost",
-                                                                             ZmMo18W.M1 == 1 & is.na(ZmMo18W.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmMo18W.M1 == 0 & is.na(ZmMo18W.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmMo18W.M1) & ZmMo18W.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmMo18W.M1) & ZmMo18W.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmMo18W.M1) & is.na(ZmMo18W.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmMS71.status = case_when(ZmMS71.M1 == 0 & ZmMS71.M2 == 0 ~ "Both_Retained",
-                                                                            ZmMS71.M1 == 1 & ZmMS71.M2 == 0 ~ "M2_Retained",
-                                                                            ZmMS71.M1 == 0 & ZmMS71.M2 == 1 ~ "M1_Retained",
-                                                                            ZmMS71.M1 == 1 & ZmMS71.M2 == 1 ~ "Both_Lost",
-                                                                            ZmMS71.M1 == 1 & is.na(ZmMS71.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmMS71.M1 == 0 & is.na(ZmMS71.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmMS71.M1) & ZmMS71.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmMS71.M1) & ZmMS71.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmMS71.M1) & is.na(ZmMS71.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmNC350.status = case_when(ZmNC350.M1 == 0 & ZmNC350.M2 == 0 ~ "Both_Retained",
-                                                                             ZmNC350.M1 == 1 & ZmNC350.M2 == 0 ~ "M2_Retained",
-                                                                             ZmNC350.M1 == 0 & ZmNC350.M2 == 1 ~ "M1_Retained",
-                                                                             ZmNC350.M1 == 1 & ZmNC350.M2 == 1 ~ "Both_Lost",
-                                                                             ZmNC350.M1 == 1 & is.na(ZmNC350.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmNC350.M1 == 0 & is.na(ZmNC350.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmNC350.M1) & ZmNC350.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmNC350.M1) & ZmNC350.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmNC350.M1) & is.na(ZmNC350.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmNC358.status = case_when(ZmNC358.M1 == 0 & ZmNC358.M2 == 0 ~ "Both_Retained",
-                                                                             ZmNC358.M1 == 1 & ZmNC358.M2 == 0 ~ "M2_Retained",
-                                                                             ZmNC358.M1 == 0 & ZmNC358.M2 == 1 ~ "M1_Retained",
-                                                                             ZmNC358.M1 == 1 & ZmNC358.M2 == 1 ~ "Both_Lost",
-                                                                             ZmNC358.M1 == 1 & is.na(ZmNC358.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmNC358.M1 == 0 & is.na(ZmNC358.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmNC358.M1) & ZmNC358.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmNC358.M1) & ZmNC358.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmNC358.M1) & is.na(ZmNC358.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmOh43.status = case_when(ZmOh43.M1 == 0 & ZmOh43.M2 == 0 ~ "Both_Retained",
-                                                                            ZmOh43.M1 == 1 & ZmOh43.M2 == 0 ~ "M2_Retained",
-                                                                            ZmOh43.M1 == 0 & ZmOh43.M2 == 1 ~ "M1_Retained",
-                                                                            ZmOh43.M1 == 1 & ZmOh43.M2 == 1 ~ "Both_Lost",
-                                                                            ZmOh43.M1 == 1 & is.na(ZmOh43.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmOh43.M1 == 0 & is.na(ZmOh43.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmOh43.M1) & ZmOh43.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmOh43.M1) & ZmOh43.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmOh43.M1) & is.na(ZmOh43.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmOh7b.status = case_when(ZmOh7b.M1 == 0 & ZmOh7b.M2 == 0 ~ "Both_Retained",
-                                                                            ZmOh7b.M1 == 1 & ZmOh7b.M2 == 0 ~ "M2_Retained",
-                                                                            ZmOh7b.M1 == 0 & ZmOh7b.M2 == 1 ~ "M1_Retained",
-                                                                            ZmOh7b.M1 == 1 & ZmOh7b.M2 == 1 ~ "Both_Lost",
-                                                                            ZmOh7b.M1 == 1 & is.na(ZmOh7b.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmOh7b.M1 == 0 & is.na(ZmOh7b.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmOh7b.M1) & ZmOh7b.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmOh7b.M1) & ZmOh7b.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmOh7b.M1) & is.na(ZmOh7b.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmP39.status = case_when(ZmP39.M1 == 0 & ZmP39.M2 == 0 ~ "Both_Retained",
-                                                                           ZmP39.M1 == 1 & ZmP39.M2 == 0 ~ "M2_Retained",
-                                                                           ZmP39.M1 == 0 & ZmP39.M2 == 1 ~ "M1_Retained",
-                                                                           ZmP39.M1 == 1 & ZmP39.M2 == 1 ~ "Both_Lost",
-                                                                           ZmP39.M1 == 1 & is.na(ZmP39.M2) ~ "M1_Lost:M2_NA",
-                                                                           ZmP39.M1 == 0 & is.na(ZmP39.M2) ~ "M1_Retained:M2_NA",
-                                                                           is.na(ZmP39.M1) & ZmP39.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                           is.na(ZmP39.M1) & ZmP39.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                           is.na(ZmP39.M1) & is.na(ZmP39.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmTx303.status = case_when(ZmTx303.M1 == 0 & ZmTx303.M2 == 0 ~ "Both_Retained",
-                                                                             ZmTx303.M1 == 1 & ZmTx303.M2 == 0 ~ "M2_Retained",
-                                                                             ZmTx303.M1 == 0 & ZmTx303.M2 == 1 ~ "M1_Retained",
-                                                                             ZmTx303.M1 == 1 & ZmTx303.M2 == 1 ~ "Both_Lost",
-                                                                             ZmTx303.M1 == 1 & is.na(ZmTx303.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZmTx303.M1 == 0 & is.na(ZmTx303.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZmTx303.M1) & ZmTx303.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZmTx303.M1) & ZmTx303.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZmTx303.M1) & is.na(ZmTx303.M2) ~ "Both_NA"),
-                                                  
-                                                  ZmTzi8.status = case_when(ZmTzi8.M1 == 0 & ZmTzi8.M2 == 0 ~ "Both_Retained",
-                                                                            ZmTzi8.M1 == 1 & ZmTzi8.M2 == 0 ~ "M2_Retained",
-                                                                            ZmTzi8.M1 == 0 & ZmTzi8.M2 == 1 ~ "M1_Retained",
-                                                                            ZmTzi8.M1 == 1 & ZmTzi8.M2 == 1 ~ "Both_Lost",
-                                                                            ZmTzi8.M1 == 1 & is.na(ZmTzi8.M2) ~ "M1_Lost:M2_NA",
-                                                                            ZmTzi8.M1 == 0 & is.na(ZmTzi8.M2) ~ "M1_Retained:M2_NA",
-                                                                            is.na(ZmTzi8.M1) & ZmTzi8.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                            is.na(ZmTzi8.M1) & ZmTzi8.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                            is.na(ZmTzi8.M1) & is.na(ZmTzi8.M2) ~ "Both_NA"),
-                                                  
-                                                  ZnPI615697.status = case_when(ZnPI615697.M1 == 0 & ZnPI615697.M2 == 0 ~ "Both_Retained",
-                                                                                ZnPI615697.M1 == 1 & ZnPI615697.M2 == 0 ~ "M2_Retained",
-                                                                                ZnPI615697.M1 == 0 & ZnPI615697.M2 == 1 ~ "M1_Retained",
-                                                                                ZnPI615697.M1 == 1 & ZnPI615697.M2 == 1 ~ "Both_Lost",
-                                                                                ZnPI615697.M1 == 1 & is.na(ZnPI615697.M2) ~ "M1_Lost:M2_NA",
-                                                                                ZnPI615697.M1 == 0 & is.na(ZnPI615697.M2) ~ "M1_Retained:M2_NA",
-                                                                                is.na(ZnPI615697.M1) & ZnPI615697.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                                is.na(ZnPI615697.M1) & ZnPI615697.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                                is.na(ZnPI615697.M1) & is.na(ZnPI615697.M2) ~ "Both_NA"),
-                                                  
-                                                  ZvTIL01.status = case_when(ZvTIL01.M1 == 0 & ZvTIL01.M2 == 0 ~ "Both_Retained",
-                                                                             ZvTIL01.M1 == 1 & ZvTIL01.M2 == 0 ~ "M2_Retained",
-                                                                             ZvTIL01.M1 == 0 & ZvTIL01.M2 == 1 ~ "M1_Retained",
-                                                                             ZvTIL01.M1 == 1 & ZvTIL01.M2 == 1 ~ "Both_Lost",
-                                                                             ZvTIL01.M1 == 1 & is.na(ZvTIL01.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZvTIL01.M1 == 0 & is.na(ZvTIL01.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZvTIL01.M1) & ZvTIL01.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZvTIL01.M1) & ZvTIL01.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZvTIL01.M1) & is.na(ZvTIL01.M2) ~ "Both_NA"),
-                                                  
-                                                  ZvTIL11.status = case_when(ZvTIL11.M1 == 0 & ZvTIL11.M2 == 0 ~ "Both_Retained",
-                                                                             ZvTIL11.M1 == 1 & ZvTIL11.M2 == 0 ~ "M2_Retained",
-                                                                             ZvTIL11.M1 == 0 & ZvTIL11.M2 == 1 ~ "M1_Retained",
-                                                                             ZvTIL11.M1 == 1 & ZvTIL11.M2 == 1 ~ "Both_Lost",
-                                                                             ZvTIL11.M1 == 1 & is.na(ZvTIL11.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZvTIL11.M1 == 0 & is.na(ZvTIL11.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZvTIL11.M1) & ZvTIL11.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZvTIL11.M1) & ZvTIL11.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZvTIL11.M1) & is.na(ZvTIL11.M2) ~ "Both_NA"),
-                                                  
-                                                  ZxTIL18.status = case_when(ZxTIL18.M1 == 0 & ZxTIL18.M2 == 0 ~ "Both_Retained",
-                                                                             ZxTIL18.M1 == 1 & ZxTIL18.M2 == 0 ~ "M2_Retained",
-                                                                             ZxTIL18.M1 == 0 & ZxTIL18.M2 == 1 ~ "M1_Retained",
-                                                                             ZxTIL18.M1 == 1 & ZxTIL18.M2 == 1 ~ "Both_Lost",
-                                                                             ZxTIL18.M1 == 1 & is.na(ZxTIL18.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZxTIL18.M1 == 0 & is.na(ZxTIL18.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZxTIL18.M1) & ZxTIL18.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZxTIL18.M1) & ZxTIL18.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZxTIL18.M1) & is.na(ZxTIL18.M2) ~ "Both_NA"),
-                                                  
-                                                  ZxTIL25.status = case_when(ZxTIL25.M1 == 0 & ZxTIL25.M2 == 0 ~ "Both_Retained",
-                                                                             ZxTIL25.M1 == 1 & ZxTIL25.M2 == 0 ~ "M2_Retained",
-                                                                             ZxTIL25.M1 == 0 & ZxTIL25.M2 == 1 ~ "M1_Retained",
-                                                                             ZxTIL25.M1 == 1 & ZxTIL25.M2 == 1 ~ "Both_Lost",
-                                                                             ZxTIL25.M1 == 1 & is.na(ZxTIL25.M2) ~ "M1_Lost:M2_NA",
-                                                                             ZxTIL25.M1 == 0 & is.na(ZxTIL25.M2) ~ "M1_Retained:M2_NA",
-                                                                             is.na(ZxTIL25.M1) & ZxTIL25.M2 == 1 ~ "M1_NA:M2_Lost",
-                                                                             is.na(ZxTIL25.M1) & ZxTIL25.M2 == 0 ~ "M1_NA:M2_Retained",
-                                                                             is.na(ZxTIL25.M1) & is.na(ZxTIL25.M2) ~ "Both_NA"),
-                                                  
-)
+long_gene_fractionation<-gene_fractionation %>% 
+  select(Gene_ID,ends_with(".only1"),ends_with("third"),ends_with("half"),ends_with("all"))%>%
+  pivot_longer(cols = c(ends_with(".only1"),ends_with("third"),ends_with("half"),ends_with("all")),
+               names_to = "old_name",
+               values_to = "Fractionated") %>%
+  mutate(Genome = str_split(old_name,"\\.",simplify = T)[,1],
+         Subgenome = str_split(old_name,"\\.",simplify = T)[,2],
+         Cutoff = str_split(old_name,"\\.",simplify = T)[,3]) %>% select(-old_name)
+long_gene_fractionation<-filter(long_gene_fractionation, !Genome %in% c("ZdGigi","ZdMomo","ZnPI615697","ZnPI615697_4to1"))
+long_gene_fractionation$Cutoff <- long_gene_fractionation$Cutoff %>% factor(levels = c("only1","third","half","all"))
+#get the number of genes called fractionatedby subgenome, cutoff, and genome
+long_gene_fractionation %>% group_by(Subgenome, Cutoff,Genome) %>% count(wt=Fractionated)
+#plot that in a graph somehow
+long_gene_fractionation %>% group_by(Subgenome, Cutoff,Genome) %>% count(wt=Fractionated) %>%
+  ggplot(aes(x=Cutoff, y=n))+
+  geom_violin()+
+  geom_jitter(height = 0, aes(color = Genome))+
+  facet_grid(cols = vars(Subgenome))+
+  theme_bw()+xlab("Fractionation Cutoff")+ylab("Gene Counts")+
+  scale_x_discrete(labels = c("only1"= "At least 1 Exon","third"="1/3 exons","half"="1/2 exons","all"="All exons"))+
+  scale_color_manual(values = genome_colors)
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/gene_fractionation.diffCutoffs.counts.png",
+       device="png",dpi=300,height=8,width = 9)
 
-gene_fractionation %>% select(-c(contains("sum"),ends_with("M1"),ends_with("M2"))) %>%
-  pivot_longer(cols = contains(".status"), names_to = "Subgenome", values_to = "Status")%>%
-  mutate(Genome = str_split(Subgenome,"[.]",simplify=T)[,1],
+long_gene_fractionation %>% group_by(Subgenome, Cutoff,Genome) %>% count(wt=Fractionated) %>%
+  mutate(Percentage = (n/12169)*100) %>%
+  ggplot(aes(x=Cutoff, y=Percentage))+
+  geom_violin()+
+  geom_jitter(height = 0, width=0.1, aes(color = Genome))+
+  facet_grid(cols = vars(Subgenome))+
+  theme_bw()+xlab("Fractionation Cutoff")+ylab("Percent of Genes")+
+  scale_x_discrete(labels = c("only1"= "At least 1 Exon","third"="1/3 exons","half"="1/2 exons","all"="All exons"))+
+  scale_color_manual(values = genome_colors)
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/gene_fractionation.diffCutoffs.percents.png",
+       device="png",dpi=300,height=8,width = 9)
+
+long_gene_fractionation.summary<-long_gene_fractionation %>% group_by(Subgenome, Cutoff,Genome) %>% count(wt=Fractionated) 
+
+summary(aov(n ~ Subgenome + Cutoff, long_gene_fractionation.summary))
+TukeyHSD(aov(n ~ Subgenome + Cutoff, long_gene_fractionation.summary),
+         which = "Cutoff")
+test.M1<-filter(long_gene_fractionation.summary, Subgenome == "M1")
+summary(aov(n ~ Cutoff, test.M1))
+TukeyHSD(aov(n ~ Cutoff, test.M1))
+test.M2<-filter(long_gene_fractionation.summary, Subgenome == "M2")
+summary(aov(n ~ Cutoff, test.M2))
+TukeyHSD(aov(n ~ Cutoff, test.M2))
+remove(test.M1)
+remove(test.M2)
+#They're all significantly different from each other no matter how it's sliced
+
+long_gene_fractionation %>% group_by(Subgenome, Cutoff,Genome) %>% count(wt=Fractionated) %>% filter(Cutoff == "all") %>% mutate(Percentage = (n/12169)*100)  %>% ungroup() %>% group_by(Subgenome)%>% summarize(mean = mean(Percentage))
+
+#add in status call based off the 4 different cutoffs
+for(g in tripsacinae_genome_IDs[c(1:4,8:34,36:39)]){
+  gene_fractionation[,paste0(g,".only1.status")]<-NA
+  gene_fractionation[,paste0(g,".third.status")]<-NA
+  gene_fractionation[,paste0(g,".half.status")]<-NA
+  gene_fractionation[,paste0(g,".all.status")]<-NA
+  for(i in 1:nrow(gene_fractionation)){
+    for(cutoff in c("only1","third","half","all")){
+      #if either subgenome has an NA call
+      if(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)]) || is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)])){
+        #If both subgenomes have NA calls
+        if(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)]) && is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)])){
+          gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"Both_NA"
+        }else{#else if only M2 is NA
+          if(is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)])){
+            if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 0 && is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)])){
+              gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M1_Retained:M2_NA"
+            }
+            if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 1 && is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)])){
+              gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M1_Lost:M2_NA"
+            }
+          }
+        else{#else if only M1 is NA
+          if(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)])){
+            if(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)]) && gene_fractionation[i,paste0(g,".M2.",cutoff)] == 0){
+              gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M1_NA:M2_Retained"
+            }
+            if(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)]) && gene_fractionation[i,paste0(g,".M2.",cutoff)] == 1){
+              gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M1_NA:M2_Lost"
+            }
+          }
+        }
+          }
+      }
+      if(!any(is.na(gene_fractionation[i,paste0(g,".M1.",cutoff)]) | is.na(gene_fractionation[i,paste0(g,".M2.",cutoff)]))){
+        if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 0 & gene_fractionation[i,paste0(g,".M2.",cutoff)] == 0){
+          gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"Both_Retained"
+        }
+        if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 1 & gene_fractionation[i,paste0(g,".M2.",cutoff)] == 0){
+          gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M2_Retained"
+        }
+        if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 0 && gene_fractionation[i,paste0(g,".M2.",cutoff)] == 1){
+          gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"M1_Retained"
+        }
+        if(gene_fractionation[i,paste0(g,".M1.",cutoff)] == 1 && gene_fractionation[i,paste0(g,".M2.",cutoff)] == 1){
+          gene_fractionation[i,paste0(g,".",cutoff,".status")]<-"Both_Lost"
+        }  
+      }
+    }
+  }
+}
+
+#replace the long form of gene fractionation from before with a new one for status
+long_gene_fractionation<-gene_fractionation %>% 
+  select(Gene_ID,ends_with(".status"))%>%
+  pivot_longer(cols = c(ends_with(".status")),
+               names_to = "old_name",
+               values_to = "Status") %>%
+  mutate(Genome = str_split(old_name,"\\.",simplify = T)[,1],
+         Cutoff = str_split(old_name,"\\.",simplify = T)[,2],
          Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
                                           "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS")),
+                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","TdFL","TdKS")),
          Status = factor(Status, levels = c("Both_Retained","M1_Retained","M2_Retained", "Both_Lost","M1_Retained:M2_NA","M1_NA:M2_Retained","M1_Lost:M2_NA","M1_NA:M2_Lost","Both_NA"))) %>%
-  na.omit()%>%
+  select(-old_name)
+
+long_gene_fractionation$Cutoff <-long_gene_fractionation$Cutoff %>% factor(levels = c("only1","third","half","all"))
+long_gene_fractionation %>% 
   ggplot(aes(y=Status))+
-  geom_bar(aes(fill=Genome), position = position_dodge())+
-  theme_minimal()+
-  scale_fill_manual(values = genome_colors)+
+  geom_bar(aes(fill=Genome),position = position_dodge())+
+  theme_bw()+
+  scale_fill_manual(values=genome_colors)+
   scale_y_discrete(labels = c("Both_Retained"="Both Retained","Both_Lost"="Both Lost","M2_Retained"="M2 Retained","M1_Retained"="M1 Retained", "M1_Retained:M2_NA"="M1 Retained, M2 NA","M1_NA:M2_Retained"="M1 NA, M2 Retained","M1_Lost:M2_NA"="M1 Lost, M2 NA","M1_NA:M2_Lost"="M1 NA, M2 Lost","Both_NA"="Both NA"))+
   xlab("Number of Genes")+ylab("")+
+  facet_wrap(facets = vars(Cutoff))+
   ggtitle("Fractionation Status by Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByGene.AllGenomes.png", device="png",dpi=500,width = 8, height = 7)
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByGene.Cutoffs.png", device="png",dpi=500,width = 8, height = 7)
 
-gene_fractionation %>% select(-c(contains("sum"),ends_with("M1"),ends_with("M2"))) %>%
-  pivot_longer(cols = contains(".status"), names_to = "Subgenome", values_to = "Status")%>%
-  mutate(Genome = str_split(Subgenome,"[.]",simplify=T)[,1],
-         Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-                                          "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-                                          "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","TdFL","TdKS")),
-         Status = factor(Status, levels = c("Both_Retained","M1_Retained","M2_Retained", "Both_Lost","M1_Retained:M2_NA","M1_NA:M2_Retained","M1_Lost:M2_NA","M1_NA:M2_Lost","Both_NA"))) %>%
-  na.omit()%>% filter(!Genome %in% c("ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1"))%>%
-  ggplot(aes(y=Status))+
-  geom_bar(aes(fill=Genome), position = position_dodge())+
-  theme_minimal()+
-  scale_fill_manual(values = genome_colors)+
-  scale_y_discrete(labels = c("Both_Retained"="Both Retained","Both_Lost"="Both Lost","M2_Retained"="M2 Retained","M1_Retained"="M1 Retained", "M1_Retained:M2_NA"="M1 Retained, M2 NA","M1_NA:M2_Retained"="M1 NA, M2 Retained","M1_Lost:M2_NA"="M1 Lost, M2 NA","M1_NA:M2_Lost"="M1 NA, M2 Lost","Both_NA"="Both NA"))+
-  xlab("Number of Genes")+ylab("")+
-  ggtitle("Fractionation Status by Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByGene.noZdZn.png", device="png",dpi=500,width = 8, height = 7)
+#if you need counts of descriptive summaries of counts of genes across genomes in each status by cutoff
+long_gene_fractionation %>% group_by(Genome, Status, Cutoff) %>% count() %>% ungroup() %>% group_by(Status, Cutoff) %>%
+  summarize(mean_count=mean(n),min_count=min(n), max_count=max(n))
 
-gene_fractionation%>% select(-c(contains("sum"),ends_with("M1"),ends_with("M2"))) %>%
-  pivot_longer(cols = contains(".status"), names_to = "Subgenome", values_to = "Status")%>%
-  mutate(Genome = str_split(Subgenome,"[.]",simplify=T)[,1],
-         Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-                                          "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-                                          "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","TdFL"))) %>%
-  na.omit()%>%
-  filter(Status == "Both_Retained") %>% group_by(Genome) %>% count() %>% as_tibble() %>% 
-  reframe(mean=mean(n),min=min(n),max=max(n))
-#both homoeologs retained mean=621.   min=304   max=857
-
-gene_fractionation%>% select(-c(contains("sum"),ends_with("M1"),ends_with("M2"))) %>%
-  pivot_longer(cols = contains(".status"), names_to = "Subgenome", values_to = "Status")%>%
-  mutate(Genome = str_split(Subgenome,"[.]",simplify=T)[,1],
-         Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-                                          "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-                                          "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","TdFL"))) %>%
-  na.omit()%>%
-  filter(Status %in% c("M1_Retained","M2_Retained")) %>% group_by(Genome) %>% count() %>% as_tibble() %>% 
-  reframe(mean=mean(n),min=min(n),max=max(n))
-#M1 or M2 homoeolog retained as singleton: mean=2423.  min=1256  max=2556
-
-gene_fractionation%>% select(-c(contains("sum"),ends_with("M1"),ends_with("M2"))) %>%
-  pivot_longer(cols = contains(".status"), names_to = "Subgenome", values_to = "Status")%>%
-  mutate(Genome = str_split(Subgenome,"[.]",simplify=T)[,1],
-         Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-                                          "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-                                          "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS"))) %>%
-  na.omit()%>%
-  filter(Status == "Both_Lost") %>% group_by(Genome) %>% count() %>% as_tibble() %>% reframe(mean=mean(n),min=min(n),max=max(n))
-#both homoeologs lost: mean =7478, min=3945, max=7861
-
-gene_fractionation %>% select(c("Gene_ID",contains("status"))) %>% 
-  pivot_longer(cols = ends_with("status"), names_to = "Genome", values_to = "Status" ) %>%
-  mutate(Genome = str_remove(Genome,".status"),
-         Genome = factor(Genome, levels=c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-                                          "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-                                          "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-                                          "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS")),
-         Status = factor(Status, levels = c("Both_Retained","M1_Retained","M2_Retained", "Both_Lost","M1_Retained:M2_NA","M1_NA:M2_Retained","M1_Lost:M2_NA","M1_NA:M2_Lost","Both_NA"))) %>%
-  group_by(Genome,Status) %>% count() %>% 
-  mutate(Percent = (n/nrow(gene_fractionation))*100) %>%
-  ggplot(aes(y=Status,x=Percent))+
-  geom_bar(aes(fill=Genome), position = position_dodge(), stat = "identity")+
-  theme_minimal()+
-  scale_fill_manual(values = genome_colors)+
+long_gene_fractionation %>% group_by(Status, Genome, Cutoff) %>% count() %>%
+  mutate(Percentage = (n/12169)*100) %>%
+  ggplot(aes(y=Status, x= Percentage))+
+  geom_bar(aes(fill=Genome),position = position_dodge(), stat = "identity")+
+  theme_bw()+
+  scale_fill_manual(values=genome_colors)+
   scale_y_discrete(labels = c("Both_Retained"="Both Retained","Both_Lost"="Both Lost","M2_Retained"="M2 Retained","M1_Retained"="M1 Retained", "M1_Retained:M2_NA"="M1 Retained, M2 NA","M1_NA:M2_Retained"="M1 NA, M2 Retained","M1_Lost:M2_NA"="M1 Lost, M2 NA","M1_NA:M2_Lost"="M1 NA, M2 Lost","Both_NA"="Both NA"))+
   xlab("Percentage of Genes")+ylab("")+
-  ggtitle("Fractionation Status by Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByPercentage.AllGenomes.png", device="png",dpi=500,width = 8, height = 7)
+  facet_wrap(facets = vars(Cutoff), scales = "free")+
+  ggtitle("Fractionation Status by Gene Under Different Cutoffs")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByPercentage.Cutoffs.png", device="png",dpi=500,width = 8, height = 8)
+
+long_gene_fractionation %>% group_by(Status, Genome, Cutoff) %>% count() %>%
+  mutate(Percentage = (n/12169)*100) %>%
+  ggplot(aes(y=Status, x=Percentage))+
+  geom_violin()+
+  geom_jitter(width = 0, height = 0.2, aes(color = Genome))+
+  theme_bw()+xlab("Percentage of Genes")+
+  facet_wrap(vars(Cutoff), scales = "free")+
+  scale_color_manual(values = genome_colors)
+
+long_gene_fractionation %>% group_by(Status, Genome, Cutoff) %>% count() %>%
+  mutate(Percentage = (n/12169)*100) %>%
+  filter(str_detect(Genome,"Zn",negate = T) & !Genome %in% c("ZdGigi","ZdMomo") ) %>%
+  ggplot(aes(x=Status, y=Percentage))+
+  geom_violin()+
+  geom_jitter(height = 0, width = 0.25, aes(color = Genome), size = 1, alpha = .75)+
+  scale_color_manual(values = genome_colors)+
+  theme_bw()+
+  scale_x_discrete(labels = c("Both_Retained"="Both Retained","Both_Lost"="Both Lost","M2_Retained"="M2 Retained","M1_Retained"="M1 Retained", "M1_Retained:M2_NA"="M1 Retained, M2 NA","M1_NA:M2_Retained"="M1 NA, M2 Retained","M1_Lost:M2_NA"="M1 Lost, M2 NA","M1_NA:M2_Lost"="M1 NA, M2 Lost","Both_NA"="Both NA"))+
+  ylab("Percentage")+xlab("")+
+  facet_wrap(vars(Cutoff), scales = "free")+
+  ggtitle("Fractionation Status by Gene")+
+  coord_flip()
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plot/fractionationStatus.ByGene.Cutoff.NoZn.violinandscatter.png",
+       device="png",dpi=300, width=9, height = 8)
+
+write_tsv(gene_fractionation, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/gene_fractionation.tsv")
 
 
 #How much differential fractionation is there? 
@@ -1532,6 +1306,14 @@ for(i in gene_id){
 genes_with_mixed_alignment<-na.omit(genes_with_mixed_alignment)
 unique(genes_with_mixed_alignment$Gene_ID) %>% length() #9250
 
+group_by(genes_with_mixed_alignment, Genome, Subgenome) %>% count() %>%
+  ggplot(aes(x=Subgenome, y=n))+
+  geom_boxplot(color = "#333333")+
+  geom_jitter(height = 0, aes(color = Genome), shape =17)+
+  scale_color_manual(values = genome_colors)+
+  theme_bw()+ylab("Genes with mixed exon alignment, count")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/genes_with_mixed_alignments.boxplot.png", device="png",dpi = 300, width = 4, height = 4)
+
 ##Maize meeting figures##
 
 #Create a figure that shows missing vs. alignment of exons by genome and subgenome
@@ -1557,7 +1339,7 @@ full.fractionation.status.summary %>% group_by(Genome, Subgenome, Status_alignme
   scale_color_manual(values=genome_colors)+
   ylab("Percent of Exons")+xlab("")
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/Exon_alignmentStatus.bySubgenome.png",device="png",dpi=300,width=6, height=8)
-
+  
 #Create a figure that shows missing vs. retained vs. deleted by genome and subgenome
 full.fractionation.status.summary %>% group_by(Genome, Subgenome, Status_character) %>% count() %>%
   mutate(Percent = (n/69269)*100) %>%
@@ -1598,13 +1380,6 @@ group_by(long.full.fractionation.status, Status, Genome) %>% count() %>% mutate(
   coord_flip()
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/fractionationStatus.ByExon.NoZn.violinandscatter.png",device="png",width = 7.5,height = 5)
 
-#Make table:
-group_by(long.full.fractionation.status, Status, Genome) %>% 
-  count() %>% 
-  mutate(Percent = (n/69269)*100) %>% 
-  pivot_wider(names_from = "Status", values_from = c("n", "Percent")) %>%
-  write_tsv("Fractionation.Status.Table.tsv")
-
 test_genome_colors<-c("ZmB73" = "#92ddb0",
                  "ZmB97" = "#92ddb0",
                  "ZmCML103" = "#4da89d",
@@ -1644,9 +1419,58 @@ test_genome_colors<-c("ZmB73" = "#92ddb0",
                  "ZdMomo_4to1" = "#433475",
                  "ZnPI615697_4to1" = "#412151",
                  "TdKS" = "#F45B69")
+
+####Investigating BOTH_LOST####
+
+#are all the exons from that gene model "both lost"?
+both_lost_status<-full.fractionation.status %>% select(contains("ID"),ends_with(".status")) %>% select(-c("ZnPI615697_4to1.status","ZnPI615697.status", "ZdMomo.status","ZdGigi.status")) %>%
+  pivot_longer(cols = ends_with("status"), names_to = "Genome", values_to = "Status") %>%
+  filter(Status == "Both_Lost") %>%
+  mutate(Genome = str_remove_all(Genome, ".status"),
+         Genome = Genome %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
+                                              "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,"ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
+                                              "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","TdFL","TdKS")))
+
+both_lost_status %>% group_by(Gene_ID, Genome) %>% count() %>%
+  left_join(x=., y=ref_gene_list, by = c("Gene_ID"="GeneID_Sb313")) %>%
+  mutate(Proportion_of_Gene_Both_Lost = n/ExonCnt) %>%
+  ggplot(aes(y=Genome, x=Proportion_of_Gene_Both_Lost))+
+  geom_violin(aes(fill=Genome))+
+  theme_bw()+scale_fill_manual(values=genome_colors)+guides(fill="none")+xlab("Proportion of Exons 'Both Lost' per Gene")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/BothLost_ProportionOfGene.violin.png",device="png",dpi=300)
+
+#Is it the same exons across genomes that show both lost
+group_by(both_lost_status, CDS_ID) %>% count() %>% 
+  #mutate(Proportion_Genomes_BothLost_Exon = n/35) %>%
+  ggplot(aes(x=n))+
+  geom_histogram(binwidth = 1)+
+  theme_bw()+xlab("Genomes a Given Exon is 'Both Lost'")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/BothLost_GenomesForGivenExon.histogram.png",device="png",dpi=300)
+
+test<-pivot_wider(both_lost_status, names_from = Genome, values_from = Status) %>%
+  add_column(Genomes_Share=NA) 
+for(i in 1:nrow(test)){
+    v<-c()
+    for(j in 4:38){
+      if(!is.na(test[i,j])){
+        v<-c(v,colnames(test)[j])
+      }
+    }
+    test$Genomes_Share[i]<-paste(v, collapse = ":")
+  }
+
+group_by(test, Genomes_Share) %>% count() %>% arrange(-n) %>% View()
+
+remove(test)
+#For the most part yes (because 5764 of exons are lost in both for all genomes)
+#but there are 3562 genome share patterns, so it varies, a big chunk seem to be TdKS vs everything, Trip vs Zea, everything vs. one of the Diplos
+
+#Save the both_lost_status as an intermediate file for potential expression work
+write_tsv(both_lost_status, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/both_lost_status.tsv")
+
 ####CONVERGENCE OF LOSS ACROSS GENES####
 
-ref.gene<-full.fractionation.status$Gene_ID %>% unique()
+#ref.gene<-full.fractionation.status$Gene_ID %>% unique()
 
 df<-filter(full.fractionation.status, Gene_ID == ref.gene[1]) #filter fractionation status to get just 1 gene
 exon.ct<-df$CDS_ID %>% unique() %>% length() #get the number of total exons
@@ -1690,9 +1514,8 @@ for(k in 1:length(ref.gene)){
 #Do it again but without Zn and Zd genomes
 convergence.NoZnZd<-tibble(Gene_ID=NA, ExonCt=NA,Genome=NA,M=NA, Loss_Pattern=NA)
 gene_atleastOneNA.NoZnZd<-tibble(Gene_ID=NA, ExonCt=NA,M=NA)
-for(k in 1:length(ref.gene)){
-  df<-filter(full.fractionation.status, Gene_ID == ref.gene[k])
-  exon.ct<-df$CDS_ID %>% unique() %>% length()
+for(k in 1:nrow(ref_gene_list)){
+  df<-filter(full.fractionation.status, Gene_ID == ref_gene_list$GeneID_Sb313[k])
   for(m in c(".M1",".M2")){
     if(df %>% select(ends_with(m)) %>% select(-c(starts_with("ZdGigi."),starts_with("ZdMomo."),contains("Zn"))) %>% lapply(function(x) any(is.na(x))) %>% 
        as_tibble() %>% pivot_longer(cols=everything()) %>%
@@ -1704,12 +1527,13 @@ for(k in 1:length(ref.gene)){
         holder<-df %>% filter(get(paste0(g,m))==1)%>% select(CDS_ID) %>% pull() %>% 
           str_split(string=.,pattern="[.]",simplify = T)
         if(nrow(holder) > 0){
-          convergence.NoZnZd<-add_row(convergence.NoZnZd, Gene_ID=ref.gene[k],
-                               ExonCt =exon.ct, Genome=g,M=str_remove(m,"[.]"),
+          convergence.NoZnZd<-add_row(convergence.NoZnZd, Gene_ID=ref_gene_list$GeneID_Sb313[k],
+                               ExonCt =ref_gene_list$ExonCnt[k], Genome=g,M=str_remove(m,"[.]"),
                                Loss_Pattern=paste(holder[,7],collapse = ":"))}
       }
     }else{
-      gene_atleastOneNA.NoZnZd<-add_row(gene_atleastOneNA.NoZnZd, Gene_ID=ref.gene[k], ExonCt=exon.ct,M=str_remove(m,"[.]"))
+      gene_atleastOneNA.NoZnZd<-add_row(gene_atleastOneNA.NoZnZd, Gene_ID=ref_gene_list$GeneID_Sb313[k],
+                                        ExonCt =ref_gene_list$ExonCnt[k],M=str_remove(m,"[.]"))
     }
   }
 }
@@ -1717,7 +1541,7 @@ for(k in 1:length(ref.gene)){
 
 #get rid of initializing NA rows
 #convergence<-convergence[-1,]
-convergence.NoZnZd<-convergence.NoZnZd[-1,]
+ convergence.NoZnZd<-convergence.NoZnZd[-1,]
 
 #gene_atleastOneNA<-gene_atleastOneNA[-1,]
 gene_atleastOneNA.NoZnZd<-gene_atleastOneNA.NoZnZd[-1,]
@@ -1858,20 +1682,21 @@ filter(convergence.NoZnZd, !is.na(RefChr)) %>% group_by(M, Genome) %>% reframe(p
 #M                1  10351339 10351339 8084.121  < 2e-16 ***
 #Genome          38    129310     3403    2.658 1.28e-07 ***
 #  Residuals   397262 508675415     1280     
-#TukeyHSD(aov(PercentGeneLost ~ M+Genome, convergence))
-
-#TukeyHSD(aov(PercentGeneLost ~ M+Genome, convergence), which = "Genome") %>% .$Genome %>% view()
-#Only significant differences are between Td genomes and Zea genomes
-#TukeyHSD(aov(PercentGeneLost ~ RefChr+M+Genome, convergence), which = "RefChr") %>% .$RefChr %>% view()
 
 aov(PercentGeneLost ~ M+Genome, convergence.NoZnZd) %>% summary()
 #Df    Sum Sq  Mean Sq   F value Pr(>F)    
 #M                1  14576761 14576761 11528.30 <2e-16 ***
 #Genome          34    200761     5905     4.67 <2e-16 ***
 #  Residuals   516235 652744586     1264 
-
+TukeyHSD(aov(PercentGeneLost ~ M+Genome, convergence.NoZnZd))
+tukey_comparisons<-TukeyHSD(aov(PercentGeneLost ~ M+Genome, convergence.NoZnZd), which = "Genome")
+tukey_comparisons$Genome %>% as_tibble(rownames=NA) %>% filter(`p adj` <= 0.05) %>% rownames()
+tukey_comparisons$Genome %>% as_tibble(rownames=NA) %>% filter(`p adj` <= 0.05) %>% summarize(min(diff),max(diff),mean(diff))
 #convergence %>% group_by(RefChr) %>% summarize(avg=mean(PercentGeneLost,na.rm=T), median=median(PercentGeneLost,na.rm=T)) 
 
+#difference between M1 and M2 homeologs across genomes
+test_model<-aov(PercentGeneLost ~ M+Genome+M*Genome, convergence.NoZnZd)
+summary(test_model)
 #how many loss patterns per gene?
 #filter(convergence, Gene_ID == convergence$Gene_ID[1]) %>% group_by(M) %>% reframe(uniqLossPattern = unique(Loss_Pattern))
 
@@ -2007,6 +1832,9 @@ filter(convergence.NoZnZd, Gene_ID == "Sobic.001G011700.1.v3.1" & M == "M2") %>%
 #gene_atleastOneNA %>% group_by(M) %>% count() #M1=4304 and M2=7507
 gene_atleastOneNA.NoZnZd %>% group_by(M) %>% count() #M1=1818 and M2=4439
 
+write_tsv(convergence.NoZnZd, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/convergence.NoZnZd.tsv")
+write_tsv(gene_atleastOneNA.NoZnZd, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/gene_atleastOneNA.NoZnZd.tsv")
+
 #how often do different genomes lose the same gene in different ways?
 #note to self, none of the loss_patterns are NA, none are ""
 #let's make the loss_pattern sharing a proportion
@@ -2018,430 +1846,6 @@ gene_atleastOneNA.NoZnZd %>% group_by(M) %>% count() #M1=1818 and M2=4439
 write_tsv(convergence.NoZnZd, file = "/work/LAS/mhufford-lab/snodgras/Fractionation/convergence_test/full.convergence.NoZnZd.tsv")
 write_tsv(gene_atleastOneNA.NoZnZd, file = "/work/LAS/mhufford-lab/snodgras/Fractionation/convergence_test/gene_atleastOneNA.NoZnZd.tsv")
 
-#convergence.shared<-tibble(Gene_ID=NA, genome1=NA, genome2=NA, M=NA, Loss_Pattern_Sharing_Per=NA,Loss_Pattern_Sharing_Abs=NA)
-
-#test<-filter(convergence, Gene_ID == "Sobic.001G004700.1.v3.1")
-
-# should the exact match percent sharing also be divided by the total number of exons in the gene?
-
-#for(g in 1:38){ #for each genome
-#  for(counter in (g+1):39){ #paired with each other genome
-#    for(b in c("M1","M2")){ #and for each subgenome
-#      if(nrow(filter(gene_atleastOneNA, Gene_ID == test$Gene_ID[1] & M == b))==0){ #if the gene x subgenome combo isn't in the list of genes with an NA
-#        pattern1<-filter(test, Genome == tripsacinae_genome_IDs[g] & M == b) %>% select(Loss_Pattern) %>% pull() 
-#        pattern2<-filter(test, Genome == tripsacinae_genome_IDs[counter] & M == b) %>% select(Loss_Pattern) %>% pull() 
-#        if(is_empty(pattern1) | is_empty(pattern2)){ #if one of the patterns is empty (AKA the gene is completely retained in one of the genomes)
-#          convergence.shared<-add_row(convergence.shared, Gene_ID = test$Gene_ID[1], genome1=tripsacinae_genome_IDs[g], genome2=tripsacinae_genome_IDs[counter], 
-#                                                         M=b, Loss_Pattern_Sharing_Per=NA,Loss_Pattern_Sharing_Abs=NA) #NAs indicate the gene is retained in one of the genomes
-#        }else{
-#          if(pattern1 == pattern2){ #if the loss patterns are exactly the same
-#            convergence.shared<-add_row(convergence.shared, Gene_ID = test$Gene_ID[1], genome1=tripsacinae_genome_IDs[g], genome2=tripsacinae_genome_IDs[counter], 
-#                                                              M=b, Loss_Pattern_Sharing_Per=(str_count(pattern1, pattern = ":")+1)/pull(select(filter(test, Genome == tripsacinae_genome_IDs[g] & M == b),ExonCt)),Loss_Pattern_Sharing_Abs=1)
-#            #Loss sharing percent 1 == complete sharing, Loss pattern sharing ABS == binary for complete sharing (1 exact share, 0 not exact share)
-#          }else{ #if there's a pattern for both genomes, but they're not exactly the same
-#            if(length(str_split(pattern1, ":",simplify = T)) >= length(str_split(pattern2,":",simplify = T))){
-#              longest.pattern<-pattern1
-#              shortest.pattern<-pattern2
-#              #figure out which one is the shortest and longest pattern
-#            }else{
-#              longest.pattern<-pattern2
-#              shortest.pattern<-pattern1
-#            }
-#            shortest.pattern<-str_split(shortest.pattern,":", simplify=T)
-#            convergence.shared<-add_row(convergence.shared, Gene_ID = test$Gene_ID[1], genome1=tripsacinae_genome_IDs[g], genome2=tripsacinae_genome_IDs[counter],
-#                                        M=b, Loss_Pattern_Sharing_Per=sum(str_count(longest.pattern, str_c(shortest.pattern, "\\b")))/pull(select(filter(test, Genome == tripsacinae_genome_IDs[g] & M == b),ExonCt)),
-#                                        Loss_Pattern_Sharing_Abs=0) 
-#            #Loss_pattern_Sharing_Per is counting the number of entries in the shortest pattern that can be found in the longest pattern divided by the total exon count
-#            #The "\\b" part keeps it from double counting (ex: 1 being counted for 1, 10, 11, etc.)
-#          }
-#        }
-#      }
-#    }
-#    counter<-counter+1
-#  }
-#}
-#convergence.shared<-convergence.shared[-1,]
-#Code from Arun to parallalize convergence.shared loop is in convergence_loop.R
-####Arun ran it separately and created the full object here: convergence_shared.v3.tsv ####
-#convergence.shared<-read_tsv("/work/LAS/mhufford-lab/snodgras/Fractionation/convergence_test/convergence_shared.v3.tsv")
-
-#select(convergence.shared, contains("genome")) %>% unique()
-
-#convergence.shared$genome1<-convergence.shared$genome1 %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                             "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                             "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                             "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,#"ZxTIL25",
-#                                                                             "ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS"))
-#convergence.shared$genome2<-convergence.shared$genome2 %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                             "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                             "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                             "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL"))
-
-#convergence.shared.stats<-convergence.shared %>% group_by(M, genome1, genome2) %>% 
-#  reframe(mean.LossSharePer = mean(Loss_Pattern_Sharing_Per,na.rm = T), #how many of the same exons are lost in genome pair/total exons?
-#          mean.LossShareAbs = mean(Loss_Pattern_Sharing_Abs, na.rm=T), #are they sharing the exact same exons lost
-#          median.LossSharePer = median(Loss_Pattern_Sharing_Per,na.rm = T),
-#          median.LossShareAbs = median(Loss_Pattern_Sharing_Abs, na.rm=T),
-#          cnt.NA = sum(is.na(Loss_Pattern_Sharing_Abs)),
-#          sum.LossShareAbs = sum(Loss_Pattern_Sharing_Abs, na.rm=T))
-
-#ggplot(data = convergence.shared.stats, aes(x=genome1, y=genome2, fill=mean.LossShareAbs))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-#  #geom_text(aes(label=sprintf("%.2f",mean.LossShareAbs)), size=2, color="darkgrey")+
-#  ggtitle("Average Absolute Sharing of Gene Loss Pattern")+#xlab("")+ylab("")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "mean")
-
-#convergence.shared.stats <- convergence.shared.stats %>% mutate(genome1_graph = case_when(genome1 %in% c("ZhRIMHU001") & 
-#                                                                                            genome2 %in% c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                                                                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                           "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                           "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18") ~ genome2,
-#                                                                                          genome1 %in% c("ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69") & 
-#                                                                                            genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                                                                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome2,
-#                                                                                          genome1 == "ZmHP301" & genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome2,
-#                                                                                          genome1 %in% c("ZmM37W","ZmMo18W") & genome2 %in% c("ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome2, 
-#                                                                                          genome1 %in% c("ZmKi11","ZmKi3") & 
-#                                                                                            genome2 %in% c("ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39","ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome2,
-#                                                                                          genome1 %in% c("ZmNC350","ZmNC358") & genome2 %in% c("ZmOh43","ZmOh7b","ZmP39","ZmTx303") ~ genome2,
-#                                                                                          genome1 == "ZvTIL01" & genome2 == "ZvTIL11" ~ genome2,
-#                                                                                          .default = genome1
-#),
-#genome2_graph = case_when(genome1 %in% c("ZhRIMHU001", "ZdMomo","ZdGigi") & 
-#                            genome2 %in% c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                           "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                           "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18") ~ genome1,
-#                          #genome2 == "ZhRIMHU001" & genome1 %in% c("ZdMomo","ZdGigi") ~ genome1,
-#                          genome1 == "ZnPI615697" & genome2 %in% c("ZvTIL01","ZvTIL11","ZxTIL18") ~ genome1, 
-#                          genome1 %in% c("ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69") & 
-#                            genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome1,
-#                          genome1 == "ZmHP301" & genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome1,
-#                          genome1 %in% c("ZmM37W","ZmMo18W") & genome2 %in% c("ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome1, 
-#                          genome1 %in% c("ZmKi11","ZmKi3") & 
-#                            genome2 %in% c("ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39","ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome1,
-#                          genome1 %in% c("ZmNC350","ZmNC358") & genome2 %in% c("ZmOh43","ZmOh7b","ZmP39","ZmTx303") ~ genome1,
-#                          genome1 == "ZvTIL01" & genome2 == "ZvTIL11" ~ genome1,
-#                          .default = genome2
-#)
-#)
-#convergence.shared.stats$genome1_graph<-convergence.shared.stats$genome1_graph %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                                                     "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                     "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                     "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,#"ZxTIL25",
-#                                                                                                     "ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS"))
-#convergence.shared.stats$genome2_graph<-convergence.shared.stats$genome2_graph %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                                                     "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                     "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                     "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","ZnPI615697_4to1","TdFL","TdKS"))
-#
-#convergence.shared.stats %>% filter(genome1 == "TdFL") %>% arrange(-sum.LossShareAbs)
-#convergence.shared.stats %>% filter(genome1 == "TdFL") %>% ungroup() %>% reframe(mean=mean(sum.LossShareAbs))
-#convergence.shared.stats %>% filter(genome1 != "TdFL") %>% arrange(sum.LossShareAbs)
-#convergence.shared.stats %>% filter(genome1 != "TdFL") %>% ungroup() %>% reframe(mean=mean(sum.LossShareAbs))
-#convergence.shared.stats %>% filter(!str_detect(genome1,"Zm") & !str_detect(genome2,"Zm") & genome1 != "TdFL") %>% ungroup() %>% reframe(mean=mean(sum.LossShareAbs))
-
-#group_by(convergence.shared.stats, M) %>% reframe(cnt.NA.mean=mean(cnt.NA, na.rm=T))
-#difference in average differential retnetion between M1 and M2
-# M1 average = 1925, M2 average = 1193
-##plots with all genomes
-#ggplot(data = convergence.shared.stats, aes(x=genome1_graph, y=genome2_graph, fill=mean.LossShareAbs))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-#  #geom_text(aes(label=sprintf("%.2f",mean.LossShareAbs)), size=2, color="darkgrey")+
-#  ggtitle("Average Absolute Sharing of Gene Loss Pattern")+xlab("")+ylab("")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "mean")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.allgenomes.avgAbsLoss.png", device="png",dpi=300,width = 15, height=8)
-#ggplot(data = convergence.shared.stats, aes(x=genome1_graph, y=genome2_graph, fill=sum.LossShareAbs))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-##  geom_text(aes(label=sum.LossShareAbs), size=2, color="darkgrey")+
-#  ggtitle("Total Absolute Sharing of Gene Loss Pattern")+xlab("")+ylab("")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "count")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.allgenomes.cntAbsLoss.png", device="png",dpi=300,width = 15, height=8)
-
-#ggplot(data = convergence.shared.stats, aes(x=genome1_graph, y=genome2_graph, fill=mean.LossSharePer))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-##  geom_text(aes(label=sprintf("%.2f",mean.LossSharePer)), size=2, color="darkgrey")+
-#  ggtitle("Average Percent Sharing of Gene Loss Pattern")+xlab("")+ylab("")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "mean")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.allgenomes.avgPerLoss.png", device="png",dpi=300,width = 15, height=8)
-
-#ggplot(data=convergence.shared.stats, aes(x=genome1_graph, y=genome2_graph, fill=cnt.NA))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-##  geom_text(aes(label=cnt.NA), size=2, color="darkgrey")+
-#  ggtitle("Total in retained vs. some loss, pairwise")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "count")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.allgenomes.cntNA.png", device="png",dpi=300,width = 15, height=8)
-
-##Maize meeting plots, turn these to percentages##
-#12157 is the number of reference genes
-#mutate(convergence.shared.stats, total.NA.percent = (cnt.NA/12157)*100, total.LossShareAbs.percent = (sum.LossShareAbs/12157)*100)%>%
-#  #filter(!genome1 %in% c("ZnPI615697","ZdGigi","ZdMomo","TdFL") &!genome2 %in% c("ZnPI615697","ZdGigi","ZdMomo")) %>%
-#  ggplot(aes(x=genome1_graph, y=genome2_graph, fill=total.NA.percent))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-#  scale_fill_viridis_c(option="magma",direction=1, name = "Percent")+
-#  ggtitle("Total percent of genes showing completely retained in one genome vs. some loss")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+xlab("")+ylab("")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerTotalRetainedVSSomeLoss.png", device = "png",dpi=300, width = 15, height=8)
-
-#convergence.shared.stats %>% filter(genome1 == "TdFL") %>% reframe(avg=mean(cnt.NA), min=min(cnt.NA),max=max(cnt.NA))
-##the range of completely retained vs. some loss counts for TdFL vs. anything
-##avg = 1938 genes, min = 1524, max = 2342 genes
-#convergence.shared.stats %>% filter(genome1 == "TdFL") %>% group_by(M)%>% reframe(avg=mean(cnt.NA), min=min(cnt.NA),max=max(cnt.NA))
-#M1: average=2322 genes, min=2299, max=2342
-#M2: average=1554 genes, min=1524, max=1579
-#convergence.shared.stats %>% group_by(M) %>% reframe(avg=mean(cnt.NA), min=min(cnt.NA),max=max(cnt.NA))
-
-#convergence.shared <-convergence.shared %>% mutate(genome.paired = str_c(genome1,genome2, sep=":"))
-
-#LossAbs.share.model<-aov(Loss_Pattern_Sharing_Abs ~ genome.paired, convergence.shared)
-#summary(LossAbs.share.model)
-#Df Sum Sq Mean Sq F value Pr(>F)    
-#
-#LossAbs.shareZhmvx.model<-aov(Loss_Pattern_Sharing_Abs ~ genome.paired, filter(convergence.shared, !genome1 %in% c("ZnPI615697","ZdGigi","ZdMomo","TdFL") &!genome2 %in% c("ZnPI615697","ZdGigi","ZdMomo")))
-#summary(LossAbs.shareZhmvx.model)
-#Df Sum Sq Mean Sq F value Pr(>F)    
-#
-
-#LossPer.share.model<-aov(Loss_Pattern_Sharing_Per ~ genome.paired, convergence.shared)
-#summary(LossPer.share.model)
-#Df Sum Sq Mean Sq F value Pr(>F)    
-#
-#LossPer.shareZhmvx.model.<-aov(Loss_Pattern_Sharing_Per ~ genome.paired, filter(convergence.shared, !genome1 %in% c("ZnPI615697","ZdGigi","ZdMomo","TdFL") &!genome2 %in% c("ZnPI615697","ZdGigi","ZdMomo")))
-#summary(LossPer.shareZhmvx.model.)
-#Df Sum Sq Mean Sq F value Pr(>F)    
-#
-
-#add in the information about each gene in each genome too
-#convergence.shared<-
-#  left_join(x=convergence.shared, 
-#          y=convergence.NoZnZd,
-#          by=c("Gene_ID","M", "genome1" = "Genome"))
-#convergence.shared<-
-#  left_join(x=convergence.shared, 
-#            y=convergence.NoZnZd,
-#            by=c("Gene_ID","M", "genome2" = "Genome"),
-#            suffix = c(".genome1",".genome2"))
-
-#colnames(convergence.shared)
-
-#remove redundant columns and rename
-#convergence.shared<- convergence.shared %>% select(-c("ExonCt.genome2","RefChr.genome2"))
-#colnames(convergence.shared)[7]<-"ExonCt"
-#colnames(convergence.shared)[11]<-"RefChr"
-
-#Trying to figure out what exactly I want to look at
-#filter(convergence.shared, Loss_Pattern_Sharing_Abs != 1 & genome1 == "TdFL") %>% view()
-
-#What about the difference in percent loss? 
-
-#convergence.shared<-mutate(convergence.shared, PercentGeneLost.diff = case_when(
-#                          is.na(PercentGeneLost.genome1) != T & is.na(PercentGeneLost.genome2) != T ~ 
-#                            PercentGeneLost.genome1 - PercentGeneLost.genome2,
-#                          is.na(PercentGeneLost.genome1) == T & is.na(PercentGeneLost.genome2) != T ~ 
-#                            0 - PercentGeneLost.genome2,
-#                          is.na(PercentGeneLost.genome1) != T & is.na(PercentGeneLost.genome2) == T ~ 
-#                            PercentGeneLost.genome1 - 0,
-#                          is.na(PercentGeneLost.genome1) == T & is.na(PercentGeneLost.genome2) == T ~ 
-#                            0)) 
-#convergence.shared %>%
-#  group_by(M, genome1,genome2) %>%
-#  filter(PercentGeneLost.diff != 0) %>%
-#  reframe(avg.PercentGeneLost.diff = mean(PercentGeneLost.diff, na.rm =T)) %>%
-#  ggplot(aes(x=genome1, y=genome2, fill = avg.PercentGeneLost.diff))+
-#  geom_tile()+
-#  scale_fill_viridis_c(option="magma",direction=1, name = "Average")
-
-#convergence.shared.stats<-convergence.shared %>% group_by(M, genome1, genome2) %>% 
-#  reframe(mean.LossSharePer = mean(Loss_Pattern_Sharing_Per,na.rm = T), #how many of the same exons are lost in genome pair/total exons?
-#          mean.LossShareAbs = mean(Loss_Pattern_Sharing_Abs, na.rm=T), #are they sharing the exact same exons lost
-#          median.LossSharePer = median(Loss_Pattern_Sharing_Per,na.rm = T),
-#          median.LossShareAbs = median(Loss_Pattern_Sharing_Abs, na.rm=T),
-#          cnt.NA = sum(is.na(Loss_Pattern_Sharing_Abs)),
-#          sum.LossShareAbs = sum(Loss_Pattern_Sharing_Abs, na.rm=T),
-#          mean.allgenes.PercentGeneLost.diff = mean(PercentGeneLost.diff, na.rm=T))
-
-
-#convergence.shared.stats <- convergence.shared.stats %>% mutate(genome1_graph = case_when(genome1 %in% c("ZhRIMHU001") & 
-#                                                                                            genome2 %in% c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                                                                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                           "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                           "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18") ~ genome2,
-#                                                                                          genome1 %in% c("ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69") & 
-#                                                                                            genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                                                                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome2,
-#                                                                                          genome1 == "ZmHP301" & genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome2,
-#                                                                                          genome1 %in% c("ZmM37W","ZmMo18W") & genome2 %in% c("ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome2, 
-#                                                                                          genome1 %in% c("ZmKi11","ZmKi3") & 
-#                                                                                            genome2 %in% c("ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39","ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome2,
-#                                                                                          genome1 %in% c("ZmNC350","ZmNC358") & genome2 %in% c("ZmOh43","ZmOh7b","ZmP39","ZmTx303") ~ genome2,
-#                                                                                          genome1 == "ZvTIL01" & genome2 == "ZvTIL11" ~ genome2,
-#                                                                                          .default = genome1
-#),
-#genome2_graph = case_when(genome1 %in% c("ZhRIMHU001", "ZdMomo","ZdGigi") & 
-#                            genome2 %in% c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                           "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                           "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18") ~ genome1,
-#                          #genome2 == "ZhRIMHU001" & genome1 %in% c("ZdMomo","ZdGigi") ~ genome1,
-#                          genome1 == "ZnPI615697" & genome2 %in% c("ZvTIL01","ZvTIL11","ZxTIL18") ~ genome1, 
-#                          genome1 %in% c("ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69") & 
-#                            genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39",
-#                                           "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome1,
-#                          genome1 == "ZmHP301" & genome2 %in% c("ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome1,
-#                          genome1 %in% c("ZmM37W","ZmMo18W") & genome2 %in% c("ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39") ~ genome1, 
-#                          genome1 %in% c("ZmKi11","ZmKi3") & 
-#                            genome2 %in% c("ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39","ZmM37W" ,"ZmMo18W" ,"ZmTx303") ~ genome1,
-#                          genome1 %in% c("ZmNC350","ZmNC358") & genome2 %in% c("ZmOh43","ZmOh7b","ZmP39","ZmTx303") ~ genome1,
-#                          genome1 == "ZvTIL01" & genome2 == "ZvTIL11" ~ genome1,
-#                          .default = genome2
-#)
-#)
-#convergence.shared.stats$genome1_graph<-convergence.shared.stats$genome1_graph %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                                                     "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                     "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                     "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,#"ZxTIL25",
-#                                                                                                     "ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697","TdFL"))
-#convergence.shared.stats$genome2_graph<-convergence.shared.stats$genome2_graph %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,"ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
-#                                                                                                     "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
-#                                                                                                     "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,"ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,"ZmNC358" ,"ZmTzi8" ,
-#                                                                                                     "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25","ZhRIMHU001" ,"ZdGigi","ZdMomo","ZnPI615697"))
-
-#ggplot(data=convergence.shared.stats, aes(x=genome1_graph, y=genome2_graph, fill=mean.allgenes.PercentGeneLost.diff))+
-#  facet_wrap(facets=vars(M))+
-#  geom_tile()+
-#  #  geom_text(aes(label=cnt.NA), size=2, color="darkgrey")+
-#  ggtitle("Average percent gene loss difference")+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle=90))+
-#  scale_fill_viridis_c(option = "magma", direction = 1, name = "mean")+
-#  xlab("")+ylab("")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.avgPercentGeneLossDifference.png",
-#       device="png",dpi=300,width=8,height=6)
-##Average percent gene loss difference between genomes that are NOT TdFL
-#filter(convergence.shared.stats, genome1 != "TdFL" & genome2 != "TdFL") %>% 
-#  select(mean.allgenes.PercentGeneLost.diff) %>% pull() %>% mean(na.rm=T)
-#Average percent gene loss difference between TdFL and Zea M1
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M1") %>% 
-#  select(mean.allgenes.PercentGeneLost.diff) %>% pull() %>% mean(na.rm=T)
-##Average percent gene loss difference between TdFL and Zea M2
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M2") %>% 
-#  select(mean.allgenes.PercentGeneLost.diff) %>% pull() %>% mean(na.rm=T)
-
-#Average mean loss sharing absolute between genomes that are NOT TdFL
-#filter(convergence.shared.stats, genome1 != "TdFL" & genome2 != "TdFL") %>% 
-#  select(mean.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-##Average mean loss sharing absolute between TdFL & Zea M1
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M1") %>% 
-#  select(mean.LossShareAbs ) %>% pull() %>% mean(na.rm=T)
-##Average mean loss sharing absolute between TdFL & Zea M2
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M2") %>% 
-#  select(mean.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-##Average mean loss sharing absolute between TdFL & Zea 
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") ) %>% 
-#  select(mean.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-
-#Average total loss sharing absolute between genomes that are NOT TdFL
-#filter(convergence.shared.stats, genome1 != "TdFL" & genome2 != "TdFL") %>% 
-#  select(sum.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-##Average total loss sharing absolute between TdFL & Zea M1
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M1") %>% 
-#  select(sum.LossShareAbs ) %>% pull() %>% mean(na.rm=T)
-##Average total loss sharing absolute between TdFL & Zea M2
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") & M=="M2") %>% 
-#  select(sum.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-##Average total loss sharing absolute between TdFL & Zea 
-#filter(convergence.shared.stats, (genome1 == "TdFL" | genome2 == "TdFL") ) %>% 
-#  select(sum.LossShareAbs) %>% pull() %>% mean(na.rm=T)
-
-###Better way to visualize???
-
-#ggplot(data=convergence, aes(x=ExonCt, y=PercentGeneLost))+
-#  geom_smooth(color="black")+
-#  geom_point(aes(color=Genome))+
-#  facet_wrap(~M)+
-#  theme_bw()+
-#  scale_color_manual(values=genome_colors)
-
-#library(ggridges)
-#ggplot(convergence.shared,aes(x=PercentGeneLost.diff))+
-#  geom_density_ridges(aes(y=genome1,fill=genome1))+
-#  theme_minimal()+
-#  scale_fill_manual(values = genome_colors)+
-#  xlab("Differences")+ylab("")+
-#  ggtitle("Percent Gene Lost Differences")
-
-# Are there any instances of a homoeolog being called fractionated but there's NO overlap of which exons were lost? 
-#Loss_Pattern_gt1.NoZdZn<-convergence.summary.NoZdZn %>% filter(Number_Unique_Loss_Patterns != 1)
-#Loss_Pattern_noOverlap.NoZdZn<-left_join(x=Loss_Pattern_gt1.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Per == 0) 
-#colnames(Loss_Pattern_noOverlap.NoZdZn)
-
-#ggplot(Loss_Pattern_noOverlap.NoZdZn, aes(x=PercentGeneLost.genome1,y=PercentGeneLost.genome2))+
- # geom_abline(intercept = 0, slope = 1, color = "grey")+
-#  geom_point(alpha = 0.4)+
-#  theme_bw()+xlab("Percent Gene Lost, genome 1")+ ylab("Percent Gene Lost, genome 2")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/DifferentialFractionation.NoOverlapLossPattern.PercentGeneLost.point.png", device = "png",dpi=300, width = 4, height=4)
-
-#Loss_Pattern_noOverlap.NoZdZn %>% group_by(genome1, genome2, M) %>% count()%>%
-# ggplot(aes(x=genome1,y=genome2, fill=n))+
-#  geom_tile()+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle = 90))+
-#  facet_wrap(~M)+
-#  scale_fill_viridis_c(option ="magma", "Counts")+ xlab("")+ylab("")+
-#  ggtitle("Total homoeologs showing completely different loss patterns")
-#ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/DifferentialFractionation.NoOverlapLossPattern.TotalCounts.heat.png",
-#       device = "png", dpi=300, height= 8, width = 11)
-
-#Loss_Pattern_gt1.NoZdZn %>% nrow() #4652
-
-#Loss_Pattern_noOverlap.NoZdZn %>% group_by(genome1, genome2, M) %>% count()%>%ungroup() %>%filter(genome1 != "TdFL" & genome2 != "TdFL") %>% select(n) %>% pull()%>% mean(na.rm=T)
-#Loss_Pattern_noOverlap.NoZdZn %>% group_by(genome1, genome2, M) %>% count()%>%ungroup() %>%filter(genome1 == "TdFL" | genome2 == "TdFL") %>% select(n) %>% pull()%>% mean(na.rm=T)
-#Loss_Pattern_noOverlap.NoZdZn %>% group_by(genome1, genome2, M) %>% count()%>%ungroup() %>%filter((genome1 == "TdFL" | genome2 == "TdFL") & M== "M1") %>% select(n) %>% pull()%>% mean(na.rm=T)
-#Loss_Pattern_noOverlap.NoZdZn %>% group_by(genome1, genome2, M) %>% count()%>%ungroup() %>%filter((genome1 == "TdFL" | genome2 == "TdFL") & M== "M2") %>% select(n) %>% pull()%>% mean(na.rm=T)
-
-#Is the bump at 2 loss patterns strictly differences in fractionation patterns between Tripsacum and Zea? 
-#Loss_Pattern_2.NoZdZn<-convergence.summary.NoZdZn %>% filter(Number_Unique_Loss_Patterns == 2)
-#left_join(x=Loss_Pattern_2.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Abs == 0) %>%
-#  group_by(genome1, genome2, M) %>% count() %>%
-#  ggplot(aes(x=genome1,y=genome2, fill=n))+
-#  geom_tile()+
-#  theme_bw()+
-#  theme(axis.text.x = element_text(angle = 90))+
-#  facet_wrap(~M)+
-#  scale_fill_viridis_c("magma")
-
-#left_join(x=Loss_Pattern_2.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Abs == 0) %>%
-#  group_by(genome1, genome2, M) %>% count() %>% ungroup() %>%filter(genome1 != "TdFL" & genome2 != "TdFL") %>% select(n) %>% pull()%>% mean(na.rm=T)
-##average genes shows 2 different loss patterns between Zea genomes
-#left_join(x=Loss_Pattern_2.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Abs == 0) %>%
-#  group_by(genome1, genome2, M) %>% count() %>% ungroup() %>%filter(genome1 == "TdFL" | genome2 == "TdFL") %>% select(n) %>% pull()%>% mean(na.rm=T)
-##average genes shows 2 different loss patterns between TdFL and Zea genomes
-#left_join(x=Loss_Pattern_2.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Abs == 0) %>%
-#  group_by(genome1, genome2, M) %>% count() %>% ungroup() %>%filter((genome1 == "TdFL" | genome2 == "TdFL") & M=="M1") %>% select(n) %>% pull()%>% mean(na.rm=T)
-##average genes shows 2 different loss patterns between TdFL and Zea genomes M1
-#left_join(x=Loss_Pattern_2.NoZdZn, y=convergence.shared, by=c("Gene_ID", "M")) %>% filter(Loss_Pattern_Sharing_Abs == 0) %>%
-#  group_by(genome1, genome2, M) %>% count() %>% ungroup() %>%filter((genome1 == "TdFL" | genome2 == "TdFL") & M=="M2") %>% select(n) %>% pull()%>% mean(na.rm=T)
-##average genes shows 2 different loss patterns between TdFL and Zea genomes M2
-#nrow(Loss_Pattern_2.NoZdZn)
-
 ####Revised method for shared.convergence####
 
 #Which genomes have completely different exon loss? Completely the same? Some loss of exons shared but not completely?
@@ -2450,7 +1854,7 @@ convergence_shared<-tibble(Gene_ID =NA, Subgenome = NA,
                            Target_Genome = NA, Query_Genome = NA, Convergence_Category = NA)
 for(i in ref.gene){#for each gene
   for(m in c("M1","M2")){ #for each subgenome
-    #so long as the gene x subgenome combo isn't in the at least one NA frame
+    #so long as the gene x subgenome combo isn't in the at least one NA dataframe
     #i.e. all genomes included have that gene as aligned
     if(nrow(filter(gene_atleastOneNA.NoZnZd, M == m & Gene_ID == i)) == 0){
       #filter the larger convergence data frame to just the gene x subgenome we want to work with
@@ -2459,27 +1863,31 @@ for(i in ref.gene){#for each gene
       for(g in tripsacinae_genome_IDs[c(1:4,8:24,27:32,34,36:39)]){
         #pull out the loss pattern for target genome
         pattern1 <- filter(df, Genome == g) %>% select(Loss_Pattern) %>% pull()
-        #now for 
+        #now for each query genome (including the self comparison) 
         for(q in tripsacinae_genome_IDs[c(1:4,8:24,27:32,34,36:39)]){
+          #pull out the loss pattern for the query genome
           pattern2 <- filter(df, Genome == q) %>% select(Loss_Pattern) %>% pull()
+          #if both patterns are empty (meaning no exon was called fractionated for either genome for gene)
           if(is_empty(c(pattern1,pattern2))){
+            #call that completely shared (by) Retention
             convergence_shared<-add_row(convergence_shared,Gene_ID =i, Subgenome = m, 
-                                        Target_Genome = g, Query_Genome = q, Convergence_Category = "CompletelyShared")
+                                        Target_Genome = g, Query_Genome = q, Convergence_Category = "CompletelyShared_Retention")
           }else{
             #if one of the patterns is empty but not both
             if((is_empty(pattern1) | is_empty(pattern2)) & !is_empty(c(pattern1,pattern2))){
+              #call that completely different (by) Retention
               convergence_shared<-add_row(convergence_shared,Gene_ID =i, Subgenome = m, 
-                                          Target_Genome = g, Query_Genome = q, Convergence_Category = "CompletelyDifferent")
+                                          Target_Genome = g, Query_Genome = q, Convergence_Category = "CompletelyDifferent_Retention")
               
             }else{
               #if neither pattern is empty
               if(!is_empty(c(pattern1,pattern2))){
-                #then do the matching bits
-                if(pattern1 == pattern2){ #if the patterns match exactly
+                #then check for matching of pattern
+                if(pattern1 == pattern2){ #if the patterns match exactly, call that Completely Shared
                   convergence_shared<-add_row(convergence_shared,Gene_ID =i, Subgenome = m, 
                                               Target_Genome = g, Query_Genome = q, Convergence_Category = "CompletelyShared")
                 }else{
-                  #figure out which is the longest, but only if both patterns aren't empty
+                  #figure out which is the longest pattern, but only if both patterns aren't empty (extra precaution given previous if/else statements)
                   if(length(str_split(pattern1, ":",simplify = T)) >= length(str_split(pattern2,":",simplify = T)) & !is_empty(c(pattern1,pattern2))){
                     longest.pattern<-pattern1
                     shortest.pattern<-pattern2
@@ -2513,57 +1921,497 @@ for(i in ref.gene){#for each gene
     }
   }
 }
-####Need to rerun with the full convergence shared####
-#only got through 2304 gene ids (3170 gene x subgenome combinations)
-convergence_shared %>% select(Gene_ID, Subgenome) %>% unique() %>% group_by(Subgenome) %>% count()
-#2174 for M1 and 995 for M2 (in terms of genes)
-convergence_shared<-convergence_shared %>% na.omit()
-#how many of the different categories were there:
-convergence_shared %>% group_by(Convergence_Category) %>% count()
 
-#heatmap
-convergence_shared.stats<-convergence_shared %>% group_by(Subgenome, Target_Genome,Query_Genome,Convergence_Category) %>%
+#Code from Arun to parallalize convergence.shared loop is in convergence_2024-12
+####Arun ran it separately and created the full object here: full_convergence_shared.tsv.gz ####
+convergence.shared<-read_tsv(gzfile("/work/LAS/mhufford-lab/snodgras/Fractionation/convergence_2024-12/full_convergence_shared.tsv.gz"))
+
+select(convergence.shared, contains("Genome")) %>% unique()
+convergence.shared$Target_Genome %>% unique()
+
+convergence.shared$Target_Genome<-convergence.shared$Target_Genome %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,
+                                                                                         "ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
+                                                                            "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
+                                                                             "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,
+                                                                            "ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,
+                                                                            "ZmNC358" ,"ZmTzi8" ,
+                                                                             "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25",
+                                                                             "ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","TdFL","TdKS"))
+convergence.shared$Query_Genome<-convergence.shared$Query_Genome %>% factor(levels = c("ZmB73" ,"ZmB97", "ZmIL14H","ZmKy21" ,
+                                                                                       "ZmM162W" ,"ZmMS71" ,"ZmOh43","ZmOh7b","ZmP39" ,
+                                                                                       "ZmHP301" ,"ZmM37W" ,"ZmMo18W" ,"ZmTx303" ,
+                                                                                       "ZmCML103" ,"ZmCML228" ,"ZmCML247" ,"ZmCML277" ,"ZmCML322" ,
+                                                                                       "ZmCML333" ,"ZmCML52" ,"ZmCML69" ,"ZmKi11" ,"ZmKi3" ,"ZmNC350" ,
+                                                                                       "ZmNC358" ,"ZmTzi8" ,
+                                                                                       "ZvTIL11" ,"ZvTIL01" ,"ZxTIL18" ,"ZxTIL25",
+                                                                                       "ZhRIMHU001" ,"ZdGigi_4to1","ZdMomo_4to1","TdFL","TdKS"))
+
+convergence.shared.counts<-convergence.shared %>% 
+  group_by(Subgenome, Target_Genome, Query_Genome, Convergence_Category) %>% 
   count()
-convergence_shared.stats<-convergence_shared.stats %>% mutate(Percent = case_when(Subgenome == "M1" ~ (n/2174)*100,
-                                                                                  Subgenome == "M2" ~ (n/995)*100))
-#This would need the fill scales to change I think
-ggplot(convergence_shared.stats,aes(x=Target_Genome, y=Query_Genome))+
-  geom_tile(aes(fill = Percent))+
-  facet_grid(rows = vars(Convergence_Category), cols = vars(Subgenome))+
+#What should the M1 and M2 denominators be for percentages
+12169 - nrow(unique(select(filter(gene_atleastOneNA.NoZnZd, M == "M1"),Gene_ID)))
+#10351 genes
+12169 - nrow(unique(select(filter(gene_atleastOneNA.NoZnZd, M == "M2"),Gene_ID)))
+#7730 genes
+
+convergence.shared.counts<-convergence.shared.counts %>% 
+  mutate(Percentage = case_when(Subgenome == "M1" ~ (n/10351)*100,
+                                Subgenome == "M2" ~ (n/7730)*100))
+
+ggplot(data = filter(convergence.shared.counts, Convergence_Category == "CompletelyShared"), 
+       aes(x=Target_Genome, y=Query_Genome, 
+           fill=Percentage))+
+  facet_wrap(facets=vars(Subgenome))+
+  geom_tile()+
+  #geom_text(aes(label=sprintf("%.2f",mean.LossShareAbs)), size=2, color="darkgrey")+
+  ggtitle("Percent Genes Completely Sharing Fractionation")+
   xlab("")+ylab("")+
   theme_bw()+
-  theme(axis.text.x = element_text(angle = 90))
+  theme(axis.text.x = element_text(angle=90))+
+  scale_fill_viridis_c(option = "magma", direction = 1, name = "Percent")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerCompletelyShared.pairwise.png",
+       device="png",dpi=300,width=9,height = 7)
+
+ggplot(data = filter(convergence.shared.counts, Convergence_Category == "CompletelyShared_Retention"), 
+       aes(x=Target_Genome, y=Query_Genome, fill=Percentage))+
+  facet_wrap(facets=vars(Subgenome))+
+  geom_tile()+
+  ggtitle("Percent Genes Completely Sharing by Retention")+
+  xlab("")+ylab("")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle=90))+
+  scale_fill_viridis_c(option = "magma", direction = 1, name = "Percent")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerCompletelySharedRetention.pairwise.png",
+       device="png",dpi=300,width=9,height = 7)
+
+ggplot(data = filter(convergence.shared.counts, Convergence_Category == "CompletelyDifferent"), 
+       aes(x=Target_Genome, y=Query_Genome, fill=Percentage))+
+  facet_wrap(facets=vars(Subgenome))+
+  geom_tile()+
+  ggtitle("Percent Genes Completely Different Fractionation")+
+  xlab("")+ylab("")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle=90))+
+  scale_fill_viridis_c(option = "magma", direction = 1, name = "Percent")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerCompletelyDifferent.pairwise.png",
+       device="png",dpi=300,width=9,height = 7)
+
+ggplot(data = filter(convergence.shared.counts, Convergence_Category == "CompletelyDifferent_Retention"), 
+       aes(x=Target_Genome, y=Query_Genome, fill=Percentage))+
+  facet_wrap(facets=vars(Subgenome))+
+  geom_tile()+
+  ggtitle("Percent Genes Completely Different by Retention")+
+  xlab("")+ylab("")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle=90))+
+  scale_fill_viridis_c(option = "magma", direction = 1, name = "Percent")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerCompletelyDifferentRetention.pairwise.png",
+       device="png",dpi=300,width=9,height = 7)
+
+ggplot(data = filter(convergence.shared.counts, Convergence_Category == "SomeShared"), 
+       aes(x=Target_Genome, y=Query_Genome, fill=Percentage))+
+  facet_wrap(facets=vars(Subgenome))+
+  geom_tile()+
+  ggtitle("Percent Genes Some Shared Fractionation")+
+  xlab("")+ylab("")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle=90))+
+  scale_fill_viridis_c(option = "magma", direction = 1, name = "Percent")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerSomeShared.pairwise.png",
+       device="png",dpi=300,width=9,height = 7)
+
+
+convergence.shared.counts %>% filter(Target_Genome == "TdFL") %>% group_by(Subgenome, Convergence_Category) %>% reframe(avg=mean(Percentage), min=min(Percentage),max=max(Percentage))
+
+convergence.shared.counts<-mutate(convergence.shared.counts, Genome_Distance = case_when(Target_Genome %in% c("TdFL","TdKS") && !Query_Genome %in% c("TdFL","TdKS") ~ "Trip_v_Zea",
+                                                              Query_Genome %in% c("TdFL","TdKS") && !Target_Genome %in% c("TdFL","TdKS") ~ "Trip_v_Zea",
+                                                              Target_Genome %in% c("TdFL","TdKS") && Query_Genome %in% c("TdFL","TdKS") ~ "Trip_accession",
+                                                              
+                                                              str_detect(Target_Genome, "Zm") && Query_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Target_Genome, "Zx") && Query_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Target_Genome, "Zv") && Query_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Target_Genome, "Zh") && Query_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Query_Genome, "Zm") && Target_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Query_Genome, "Zx") && Target_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Query_Genome, "Zv") && Target_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              str_detect(Query_Genome, "Zh") && Target_Genome %in% c("ZdMomo_4to1","ZdGigi_4to1") ~ "Zea_species",
+                                                              
+                                                              str_detect(Target_Genome, "Zm") && str_detect(Query_Genome, "Zx") ~ "Zea_Subspecies",
+                                                              str_detect(Target_Genome, "Zm") && str_detect(Query_Genome, "Zv") ~ "Zea_Subspecies",
+                                                              str_detect(Target_Genome, "Zm") && str_detect(Query_Genome, "Zh") ~ "Zea_Subspecies",
+                                                              str_detect(Target_Genome, "Zx") && str_detect(Query_Genome, "Zh") ~ "Zea_Subspecies",
+                                                              str_detect(Target_Genome, "Zx") && str_detect(Query_Genome, "Zv") ~ "Zea_Subspecies",
+                                                              str_detect(Target_Genome, "Zv") && str_detect(Query_Genome, "Zh") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zm") && str_detect(Target_Genome, "Zx") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zm") && str_detect(Target_Genome, "Zv") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zm") && str_detect(Target_Genome, "Zh") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zx") && str_detect(Target_Genome, "Zh") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zx") && str_detect(Target_Genome, "Zv") ~ "Zea_Subspecies",
+                                                              str_detect(Query_Genome, "Zv") && str_detect(Target_Genome, "Zh") ~ "Zea_Subspecies",
   
-filter(convergence_shared.stats, Convergence_Category == "CompletelyDifferent") %>%
-  ggplot(aes(x=Target_Genome,y=Query_Genome))+
-  geom_tile(aes(fill = Percent))+
+                                                              str_detect(Target_Genome, "Zm") && str_detect(Query_Genome, "Zm") ~ "Zea_accessions",
+                                                              str_detect(Target_Genome, "Zx") && str_detect(Query_Genome, "Zx") ~ "Zea_accessions",
+                                                              str_detect(Target_Genome, "Zv") && str_detect(Query_Genome, "Zv") ~ "Zea_accessions",
+                                                              str_detect(Target_Genome, "Zh") && str_detect(Query_Genome, "Zh") ~ "Zea_accessions",
+                                                              str_detect(Target_Genome, "Zd") && str_detect(Query_Genome, "Zd") ~ "Zea_accessions",
+                                                              str_detect(Query_Genome, "Zm") && str_detect(Target_Genome, "Zm") ~ "Zea_accessions",
+                                                              str_detect(Query_Genome, "Zx") && str_detect(Target_Genome, "Zx") ~ "Zea_accessions",
+                                                              str_detect(Query_Genome, "Zv") && str_detect(Target_Genome, "Zv") ~ "Zea_accessions",
+                                                              str_detect(Query_Genome, "Zh") && str_detect(Target_Genome, "Zh") ~ "Zea_accessions",
+                                                              str_detect(Query_Genome, "Zd") && str_detect(Target_Genome, "Zd") ~ "Zea_accessions"
+                                                              ),
+                                  Genome_Distance = Genome_Distance %>% factor(levels = c("Trip_v_Zea","Zea_species","Zea_Subspecies","Zea_accessions","Trip_accession")))
+convergence.shared.counts$Convergence_Category <-convergence.shared.counts$Convergence_Category%>% factor(levels=c("CompletelyShared_Retention","CompletelyDifferent_Retention","CompletelyShared","SomeShared","CompletelyDifferent"))
+
+convergence.shared.counts<-convergence.shared.counts %>% 
+  mutate(Genome_Pairs = case_when(Target_Genome == "ZmB73" && Query_Genome %in% c("ZmB97","ZmIL14H","ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmB73" && Target_Genome %in% c("ZmB97","ZmIL14H","ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmB97" && Query_Genome %in% c("ZmIL14H","ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmB97" && Target_Genome %in% c("ZmIL14H","ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmIL14H" && Query_Genome %in% c("ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmIL14H" && Target_Genome %in% c("ZmKy21","ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                  "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmKy21" && Query_Genome %in% c("ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                    "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmKy21" && Target_Genome %in% c("ZmM162W","ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                    "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmM162W" && Query_Genome %in% c("ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmM162W" && Target_Genome %in% c("ZmMS71","ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmMS71" && Query_Genome %in% c("ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                    "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmMS71" && Target_Genome %in% c("ZmOh43","ZmOh7b","ZmP39","ZmHP301",    
+                                                                                    "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmOh43" && Query_Genome %in% c("ZmOh7b","ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmOh43" && Target_Genome %in% c("ZmOh7b","ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmOh7b" && Query_Genome %in% c("ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmOh7b" && Target_Genome %in% c("ZmP39","ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmP39" && Query_Genome %in% c("ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmP39" && Target_Genome %in% c("ZmHP301",    
+                                                                                   "ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                   "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmHP301" && Query_Genome %in% c("ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmHP301" && Target_Genome %in% c("ZmCML103","ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                  "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML103" && Query_Genome %in% c("ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML103" && Target_Genome %in% c("ZmCML228","ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML228" && Query_Genome %in% c("ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML228" && Target_Genome %in% c("ZmCML247","ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML247" && Query_Genome %in% c("ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML247" && Target_Genome %in% c("ZmCML277","ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML277" && Query_Genome %in% c("ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML277" && Target_Genome %in% c("ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML322" && Query_Genome %in% c("ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML322" && Target_Genome %in% c("ZmCML333","ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML333" && Query_Genome %in% c("ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML333" && Target_Genome %in% c("ZmCML52","ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML52" && Query_Genome %in% c("ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML52" && Target_Genome %in% c("ZmCML69","ZmKi11","ZmKi3",      
+                                                                                     "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                     "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmCML69" && Query_Genome %in% c("ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmCML69" && Target_Genome %in% c("ZmKi11","ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmKi11" && Query_Genome %in% c("ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmKi11" && Target_Genome %in% c("ZmKi3",      
+                                                                                    "ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmKi3" && Query_Genome %in% c("ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmKi3" && Target_Genome %in% c("ZmNC350","ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmNC350" && Query_Genome %in% c("ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmNC350" && Target_Genome %in% c("ZmNC358","ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                  "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmNC358" && Query_Genome %in% c("ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmNC358" && Target_Genome %in% c("ZmTzi8","ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZmTzi8" && Query_Genome %in% c("ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZmTzi8" && Target_Genome %in% c("ZvTIL11","ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZvTIL11" && Query_Genome %in% c("ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZvTIL11" && Target_Genome %in% c("ZvTIL01","ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                   "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZvTIL01" && Query_Genome %in% c("ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZvTIL01" && Target_Genome %in% c("ZxTIL18","ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZxTIL18" && Query_Genome %in% c("ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZxTIL18" && Target_Genome %in% c("ZxTIL25","ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZxTIL25" && Query_Genome %in% c("ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZxTIL25" && Target_Genome %in% c("ZhRIMHU001","ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZhRIMHU001" && Query_Genome %in% c("ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZhRIMHU001" && Target_Genome %in% c("ZdGigi_4to1","ZdMomo_4to1",
+                                                                                    "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZdGigi_4to1" && Query_Genome %in% c("ZdMomo_4to1",
+                                                                                       "TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZdGigi_4to1" && Target_Genome %in% c("ZdMomo_4to1",
+                                                                                       "TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "ZdMomo_4to1" && Query_Genome %in% c("TdFL","TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "ZdMomo_4to1" && Target_Genome %in% c("TdFL","TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == "TdFL" && Query_Genome %in% c("TdKS") ~ paste0(Target_Genome, "_v_",Query_Genome),
+                                  Query_Genome == "TdFL" && Target_Genome %in% c("TdKS") ~ paste0(Query_Genome, "_v_",Target_Genome),
+                                  
+                                  Target_Genome == Query_Genome ~ "Self"
+                                  ))
+convergence.shared.counts<-filter(convergence.shared.counts, Genome_Pairs != "Self")
+
+shared.counts.model<-glm(data = unique(select(ungroup(convergence.shared.counts), Percentage, Convergence_Category, Subgenome, Genome_Pairs)),
+    Percentage ~ 0 +  Subgenome + Convergence_Category + Genome_Pairs)
+
+anova(shared.counts.model, test = "Chisq")
+
+#maybe this modeling isn't working because Subgenome and Convergence_Categories shouldn't be compared?
+#what we're really interested in is if Subgenome and Convergence Category are the same, are there differences between genomes?
+#but we don't have replicates for each genome pair 
+#what we really want is a chi-sq
+temp<-unique(select(ungroup(convergence.shared.counts),Convergence_Category,Percentage, Genome_Pairs, Subgenome))
+# In this case, the hypothesis tested is whether the population probabilities equal those in p, or are all equal if p is not given. 
+chisq.test(select(filter(temp, Convergence_Category == "CompletelyShared" & Subgenome == "M1"), Percentage)) #P = 1
+chisq.test(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M1"), Percentage)) #P < 2.2e-16
+chisq.test(select(filter(temp, Convergence_Category == "CompletelyDifferent" & Subgenome == "M1"), Percentage)) #p=1
+chisq.test(select(filter(temp, Convergence_Category == "CompletelyShared" & Subgenome == "M2"), Percentage)) #p=1 
+chisq.test(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M2"), Percentage), simulate.p.value = T) #warning p < 2.2e-16
+chisq.test(select(filter(temp, Convergence_Category == "CompletelyDifferent" & Subgenome == "M2"), Percentage)) #P=1
+
+M1.someshare.model<-chisq.test(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M1"), Percentage))
+M2.someshare.model<-chisq.test(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M2"), Percentage)) #warning p < 2.2e-16
+
+#check to make sure genome_pair vectors are equal
+select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M1"), Genome_Pairs)  %>%str()
+select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M2"), Genome_Pairs) %>% str()
+
+#they are not because there are some duplicates for some pairs with slightly different counts/percentages from the collapsing of target and query genomes
+x<-tibble(Genome_Pairs = pull(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M1"), Genome_Pairs)),
+          M1.Residuals = M1.someshare.model$residuals)
+y<-tibble(Genome_Pairs = pull(select(filter(temp, Convergence_Category == "SomeShared" & Subgenome == "M2"), Genome_Pairs)),
+          M2.Residuals = M2.someshare.model$residuals)
+x<-x %>% group_by(Genome_Pairs) %>% summarize(across(everything(), function(x) mean(x,na.rm=T)))
+y<-y %>% group_by(Genome_Pairs) %>% summarize(across(everything(), function(x) mean(x,na.rm=T)))
+inner_join(x,y) %>% 
+  pivot_longer(starts_with("M"), names_to = "Subgenome", values_to = "Residuals") %>%
+  mutate(Subgenome = str_split(Subgenome, "\\.", simplify=T)[,1]) %>%
+  ggplot(aes(x=Subgenome, y=Genome_Pairs))+
+  geom_tile(aes(fill=Residuals))+
+  #geom_text(aes(label=sprintf("%.2f",Residuals)), size=2, color="darkgrey")+
+  theme_bw()
+#this is a very ugly graph but it does show the residuals might be correlated across Subgenome
+z<-inner_join(x,y)
+cor.test(z$M1.Residuals,z$M2.Residuals)  #correlated 0.9975
+
+ggplot(z)+geom_histogram(aes(x=M1.Residuals),fill="darkblue",alpha=0.5)+geom_histogram(aes(x=M2.Residuals),fill="darkred",alpha=0.5)
+
+filter(z, M1.Residuals >= 3) %>% select(Genome_Pairs) %>% pull()
+filter(z, M2.Residuals >= 3) %>% select(Genome_Pairs) %>% pull()
+#the residuals that are the most positive are Zea vs. Tripsacum
+
+filter(z, M1.Residuals <= -1) %>% select(Genome_Pairs) %>% pull()
+filter(z, M2.Residuals <= -1) %>% select(Genome_Pairs) %>% pull()
+#negative residuals appear to be comparisons between genomes that are different accessions of the same species/subspecies
+
+#let's try to run an anova based on the broad classifications (so not exactly pairwise)
+temp<-unique(select(ungroup(convergence.shared.counts), Convergence_Category, Subgenome, Genome_Distance, Percentage))
+#Completely Different
+summary(aov(data = filter(temp, Convergence_Category == "CompletelyDifferent"), Percentage ~ Subgenome + Genome_Distance))
+TukeyHSD(aov(data = filter(temp, Convergence_Category == "CompletelyDifferent"), Percentage ~ Subgenome + Genome_Distance))
+#both terms significant
+#M2 < M1
+#significant diffs for all categories vs. Trip v. Zea
+
+#Completely Different Retention
+summary(aov(data = filter(temp, Convergence_Category == "CompletelyDifferent_Retention"), Percentage ~ Subgenome + Genome_Distance))
+TukeyHSD(aov(data = filter(temp, Convergence_Category == "CompletelyDifferent_Retention"), Percentage ~ Subgenome + Genome_Distance))
+#both terms are significant
+#M2 < M1
+#all categories are different from each other except Trip accession - Zea accessions
+
+#Completely Shared
+summary(aov(data = filter(temp, Convergence_Category == "CompletelyShared"), Percentage ~ Subgenome + Genome_Distance))
+TukeyHSD(aov(data = filter(temp, Convergence_Category == "CompletelyShared"), Percentage ~ Subgenome + Genome_Distance))
+#both terms are significant
+#M2 > M1
+#All comparisions are different except Trip accession vs Z subspecies
+
+#Completely Shared Retention
+summary(aov(data = filter(temp, Convergence_Category == "CompletelyShared_Retention"), Percentage ~ Subgenome + Genome_Distance))
+TukeyHSD(aov(data = filter(temp, Convergence_Category == "CompletelyShared_Retention"), Percentage ~ Subgenome + Genome_Distance))
+#both terms are significant
+#M2 < M1
+#All categories are significantly different
+
+#Some Shared
+summary(aov(data = filter(temp, Convergence_Category == "SomeShared"), Percentage ~ Subgenome + Genome_Distance))
+TukeyHSD(aov(data = filter(temp, Convergence_Category == "SomeShared"), Percentage ~ Subgenome + Genome_Distance))
+#Both terms are significant
+#M2 < M1
+#all categories are significantly different
+
+significance_symbols<-temp %>% group_by(Convergence_Category, Genome_Distance, Subgenome) %>% summarize(Percentage = max(Percentage))
+significance_symbols<-mutate(significance_symbols, 
+                             Symbol = case_when(Convergence_Category == "CompletelyDifferent" & Genome_Distance == "Trip_v_Zea" ~ "A",
+                                                Convergence_Category == "CompletelyDifferent" & Genome_Distance != "Trip_v_Zea" ~ "B",
+                                                Convergence_Category == "CompletelyDifferent_Retention" & Genome_Distance %in% c("Trip_accession","Zea_accessions") ~ "A",
+                                                Convergence_Category == "CompletelyDifferent_Retention" & Genome_Distance == "Zea_Subspecies" ~ "B",
+                                                Convergence_Category == "CompletelyDifferent_Retention" & Genome_Distance == "Zea_species" ~ "C",
+                                                Convergence_Category == "CompletelyDifferent_Retention" & Genome_Distance == "Trip_v_Zea" ~ "D",
+                                                Convergence_Category == "CompletelyShared" & Genome_Distance %in% c("Trip_accession","Zea_Subspecies") ~ "A",
+                                                Convergence_Category == "CompletelyShared" & Genome_Distance == "Zea_accessions" ~ "B",
+                                                Convergence_Category == "CompletelyShared" & Genome_Distance == "Zea_species" ~ "C",
+                                                Convergence_Category == "CompletelyShared" & Genome_Distance == "Trip_v_Zea" ~ "D",
+                                                Convergence_Category == "CompletelyShared_Retention" & Genome_Distance == "Trip_accession" ~ "A",
+                                                Convergence_Category == "CompletelyShared_Retention" & Genome_Distance == "Zea_accessions" ~ "B",
+                                                Convergence_Category == "CompletelyShared_Retention" & Genome_Distance == "Zea_Subspecies" ~ "C",
+                                                Convergence_Category == "CompletelyShared_Retention" & Genome_Distance == "Zea_species" ~ "D",
+                                                Convergence_Category == "CompletelyShared_Retention" & Genome_Distance == "Trip_v_Zea" ~ "E",
+                                                Convergence_Category == "SomeShared" & Genome_Distance == "Trip_accession" ~ "A",
+                                                Convergence_Category == "SomeShared" & Genome_Distance == "Zea_accessions" ~ "B",
+                                                Convergence_Category == "SomeShared" & Genome_Distance == "Zea_Subspecies" ~ "C",
+                                                Convergence_Category == "SomeShared" & Genome_Distance == "Zea_species" ~ "D",
+                                                Convergence_Category == "SomeShared" & Genome_Distance == "Trip_v_Zea" ~ "E"))
+
+ggplot(convergence.shared.counts, aes(y= Convergence_Category, x=Percentage))+
+  geom_boxplot(aes(color = Genome_Distance))+
+  geom_text(data = significance_symbols, 
+            aes(label = Symbol, x = Percentage+6, y=Convergence_Category, color=Genome_Distance),
+            position = position_dodge(0.9), show.legend = F, size = 3)+
   facet_wrap(vars(Subgenome))+
-  xlab("")+ylab("")+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle = 90))+
-  ggtitle("Completely Different Exons Fractionated for Same Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.NoZnZd.CDexons.png",
-       device = "png", dpi = 300, width = 7, height = 6)
-filter(convergence_shared.stats, Convergence_Category == "CompletelyShared") %>%
-  ggplot(aes(x=Target_Genome,y=Query_Genome))+
-  geom_tile(aes(fill = Percent))+
-  facet_wrap(vars(Subgenome))+
-  xlab("")+ylab("")+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle = 90))+
-  ggtitle("Completely Same Exons Fractionated for Same Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.NoZnZd.CSexons.png",
-       device = "png", dpi = 300, width = 7, height = 6)
-filter(convergence_shared.stats, Convergence_Category == "SomeShared") %>%
-  ggplot(aes(x=Target_Genome,y=Query_Genome))+
-  geom_tile(aes(fill = Percent))+
-  facet_wrap(vars(Subgenome))+
-  xlab("")+ylab("")+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle = 90))+
-  ggtitle("Some Exons Differentially Fractionated for Same Gene")
-ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.NoZnZd.SSexons.png",
-       device = "png", dpi = 300, width = 7, height = 6)
+  theme_bw()+ylab("")+
+  scale_y_discrete(labels = c("CompletelyShared_Retention" = "Ret.: Complete Share",
+                              "CompletelyDifferent_Retention"  = "Ret.: No Share.",
+                              "CompletelyShared" = "Frac.: Complete Share",
+                              "SomeShared" = "Frac.: Some Share",
+                              "CompletelyDifferent" = "Frac.: No Share"))+
+  scale_color_manual(values = c("Trip_v_Zea" = "#F45B69","Trip_accession" = "#f0a3aa","Zea_species" = "#412151","Zea_Subspecies" = "#247590","Zea_accessions" = "#4da89d"),
+                     name = "Genomes Compared")
+ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/convergence.PerConvergenceCategoriesByGenomeDist.boxplot.png",
+       device = "png",dpi=300,height = 3.5, width = 6)
+
+convergence.shared.counts$Genome_Pairs %>% unique() %>% length() #496 Genome pairs
+
+convergence.shared.counts %>% group_by(Subgenome, Convergence_Category) %>% reframe(mean(Percentage, na.rm = T))
+convergence.shared %>% group_by(Subgenome, Convergence_Category) %>% select(Gene_ID, Subgenome, Convergence_Category) %>% unique() %>% count()
+
+#investigate the instances where there is fractionation in both genomes but they're both completely different
 
 ####DIFFERENTIAL RETENTION####
 #Here we'll only consider those that are aligned in both M1 and M2
@@ -2693,6 +2541,114 @@ filter(differential_retention.NoZnZd, BothRetainedCnt > 0 & M2RetainedCnt > 0 & 
 filter(differential_retention.NoZnZd, BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0) %>% select(Gene_ID)%>% pull() %>% unique() %>% length() 
 #318
 
+#ARE THOSE EXONS WITH BOTH LOSS ENRICHED FOR DIFFERENTIAL RETENTION? 
+
+#HOW ARE THE SUMMARY COUNTS OF PATTERNS THE SAME IF ONE IS SUPPOSED TO BE A SUBSET OF THE OTHER???
+differential_retention.NoZnZd %>% filter(ID %in% both_lost_status$ID) %>%
+  mutate(Pattern = case_when(BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained",
+                             BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "M1Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "BothDeleted",
+                             BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "BothDeleted:M1Retained",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "BothDeleted:M2Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "M1Retained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothDeleted:BothRetained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained:M2Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~"M1Retained:M2Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~"BothRetained:M1Retained:M2Retained:BothDeleted")) %>%
+  group_by(Pattern) %>%
+  count() %>% arrange(-n)
+#basically the counts are the same, because all the "Both Deleted" CDS are already counted in the patterns that have "BothDeleted" in them
+#So there's not a good way to test if these "both deleted" cds are enriched for differential retention.
+
+#How many genes are in the 3 and 4 status categories?
+differential_retention.NoZnZd<-differential_retention.NoZnZd %>% 
+  mutate(Pattern = case_when(BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained",
+                             BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "M1Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "BothDeleted",
+                             BothLostCnt == 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "BothDeleted:M1Retained",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt == 0 ~ "BothDeleted:M2Retained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~ "M1Retained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothDeleted:BothRetained",
+                             BothLostCnt == 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained:M2Retained",
+                             BothLostCnt > 0 & M2RetainedCnt == 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~ "BothRetained:M1Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt == 0 & BothRetainedCnt > 0 ~ "BothRetained:M2Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt == 0 ~"M1Retained:M2Retained:BothDeleted",
+                             BothLostCnt > 0 & M2RetainedCnt > 0 & M1RetainedCnt > 0 & BothRetainedCnt > 0 ~"BothRetained:M1Retained:M2Retained:BothDeleted"))
+
+#for three statuses
+filter(differential_retention.NoZnZd, Pattern %in% c("BothRetained:M1Retained:M2Retained","BothRetained:M1Retained:BothDeleted","BothRetained:M2Retained:BothDeleted","M1Retained:M2Retained:BothDeleted")) %>%
+  select(Gene_ID) %>% unique() %>%
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_3status_geneIDs.txt")
+#for all 4 statuses
+filter(differential_retention.NoZnZd, Pattern %in% c("BothRetained:M1Retained:M2Retained:BothDeleted")) %>%
+  select(Gene_ID) %>% unique() %>% 
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_4status_geneIDs.txt")
+
+#just one status
+filter(differential_retention.NoZnZd, Pattern %in% c("BothRetained")) %>%
+  select(Gene_ID) %>% unique() %>% 
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_1BothRet_geneIDs.txt")
+
+filter(differential_retention.NoZnZd, Pattern %in% c("M1Retained")) %>%
+  select(Gene_ID) %>% unique() %>% 
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_1M1Ret_geneIDs.txt")
+
+filter(differential_retention.NoZnZd, Pattern %in% c("M2Retained")) %>%
+  select(Gene_ID) %>% unique() %>% 
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_1M2Ret_geneIDs.txt")
+
+filter(differential_retention.NoZnZd, Pattern %in% c("BothDeleted")) %>%
+  select(Gene_ID) %>% unique() %>% 
+  pull() %>%
+  str_remove_all("\\.[0-9]*\\.v3\\.[0-9]") %>%
+  str_replace_all("Sobic\\.", "SORBI_3") %>%
+  write_lines("/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/differentialRetention_1BothDel_geneIDs.txt")
+
+#when it's two statuses, which genomes are varying
+TwoStatus<-filter(differential_retention.NoZnZd, Pattern %in% c("BothRetained:M1Retained","BothRetained:M2Retained","BothDeleted:M1Retained",
+                                                     "BothDeleted:M2Retained","M1Retained:M2Retained","BothDeleted:BothRetained"))
+TwoStatus<-select(full.fractionation.status, ID, Gene_ID, ends_with("status")) %>% 
+  select(-c(contains("Zn"),"ZdMomo.status","ZdGigi.status")) %>%
+  filter(ID %in% TwoStatus$ID) %>%
+  pivot_longer(cols = ends_with(".status"), names_to = "Genome", values_to = "Status") %>%
+  filter(str_detect(Status, "NA",negate=T)) %>%
+  mutate(Genome = Genome %>% str_remove(".status")) %>%
+  pivot_wider(names_from = Status, values_from = Genome)
+
+subset(TwoStatus, sapply(Both_Lost, \(x) all(x %in% c("TdFL","TdKS")))) %>% subset(sapply(Both_Lost, \(x) !is.null(x)))
+#781 genes where Trip both lost versus Zea in anything else
+subset(TwoStatus, sapply(Both_Retained, \(x) all(x %in% c("TdFL","TdKS")))) %>% subset(sapply(Both_Retained, \(x) !is.null(x)))
+#4135
+subset(TwoStatus, sapply(M1_Retained, \(x) all(x %in% c("TdFL","TdKS")))) %>% subset(sapply(M1_Retained, \(x) !is.null(x)))
+#1331
+subset(TwoStatus, sapply(M2_Retained, \(x) all(x %in% c("TdFL","TdKS")))) %>% subset(sapply(M2_Retained, \(x) !is.null(x)))
+#846
+# out of 21285 rows
+(781+4135+1331+846)/21285
+
 
 ####SPATIAL ORGANIZATION OF FRACTIONATION####
 ##Does fractionation change by ref chromosome?
@@ -2745,6 +2701,8 @@ fractionationStatusByRefChr<-long.full.fractionation.status %>% group_by(Genome,
                              RefChr == "Chr08" ~ (n/2898)*100,
                              RefChr == "Chr09" ~ (n/5743)*100,
                              RefChr == "Chr10" ~ (n/5808)*100))
+
+
 filter(fractionationStatusByRefChr, !is.na(RefChr)) %>%
   ggplot(aes(x=Percent,y=Status))+
   geom_bar(aes(fill=Genome), position = position_dodge(), stat="identity")+
@@ -2844,54 +2802,6 @@ multcomp::cld(
   )
 )
 #Chr01=A, 02=AB, 03=BC,04=A,05=AB,06=C,07=D,08=BC,09=AB,10=D
-
-sig.diff.byRefChr<-tibble(RefChr_1 = c(rep("Chr01", 36), rep("Chr02", 36), rep("Chr03",36),rep("Chr04",36),rep("Chr05",36),
-                                       rep("Chr06", 36), rep("Chr07", 36), rep("Chr08",36),rep("Chr09",36),rep("Chr10",36)),
-                          RefChr_2 = c(paste0("Chr0",2:9),"Chr10",paste0("Chr0",2:9),"Chr10",paste0("Chr0",2:9),"Chr10",paste0("Chr0",2:9),"Chr10",
-                                       paste0("Chr0",c(1,3:9)),"Chr10",paste0("Chr0",c(1,3:9)),"Chr10",paste0("Chr0",c(1,3:9)),"Chr10",paste0("Chr0",c(1,3:9)),"Chr10",
-                                       paste0("Chr0",c(1:2,4:9)),"Chr10",paste0("Chr0",c(1:2,4:9)),"Chr10",paste0("Chr0",c(1:2,4:9)),"Chr10",paste0("Chr0",c(1:2,4:9)),"Chr10",
-                                       paste0("Chr0",c(1:3,5:9)),"Chr10",paste0("Chr0",c(1:3,5:9)),"Chr10",paste0("Chr0",c(1:3,5:9)),"Chr10",paste0("Chr0",c(1:3,5:9)),"Chr10",
-                                       paste0("Chr0",c(1:4,6:9)),"Chr10",paste0("Chr0",c(1:4,6:9)),"Chr10",paste0("Chr0",c(1:4,6:9)),"Chr10",paste0("Chr0",c(1:4,6:9)),"Chr10",
-                                       paste0("Chr0",c(1:5,7:9)),"Chr10",paste0("Chr0",c(1:5,7:9)),"Chr10",paste0("Chr0",c(1:5,7:9)),"Chr10",paste0("Chr0",c(1:5,7:9)),"Chr10",
-                                       paste0("Chr0",c(1:6,8:9)),"Chr10",paste0("Chr0",c(1:6,8:9)),"Chr10",paste0("Chr0",c(1:6,8:9)),"Chr10",paste0("Chr0",c(1:6,8:9)),"Chr10",
-                                       paste0("Chr0",c(1:7,9)),"Chr10",paste0("Chr0",c(1:7,9)),"Chr10",paste0("Chr0",c(1:7,9)),"Chr10",paste0("Chr0",c(1:7,9)),"Chr10",
-                                       paste0("Chr0",c(1:8)),"Chr10",paste0("Chr0",c(1:8)),"Chr10",paste0("Chr0",c(1:8)),"Chr10",paste0("Chr0",c(1:8)),"Chr10",
-                                       paste0("Chr0",c(1:9)),paste0("Chr0",c(1:9)),paste0("Chr0",c(1:9)),paste0("Chr0",c(1:9))
-                          ),
-                          Status = c(rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9),
-                                     rep("Both_Retained",9),rep("M1_Retained",9),rep("M2_Retained",9),rep("Both_Deleted",9)
-                          ),
-                          SignificantlyDifferent=c(rep(T,9),F,F,F,T,T,T,T,T,F,F,F,T,T,T,T,T,T,F,F,T,F,T,F,F,F,T,F,
-                                                   T,F,F,T,F,T,T,T,T,F,F,F,T,T,T,T,T,F,F,F,T,T,T,T,T,T,T,F,F,F,F,T,T,F,F,T,
-                                                   T,F,F,T,F,T,T,T,T,F,F,T,T,T,T,T,T,T,F,F,T,T,T,T,T,T,F,T,F,T,F,F,T,F,F,T,
-                                                   T,F,F,T,F,T,T,T,T,F,F,T,T,T,T,T,T,F,T,T,T,T,F,F,T,T,T,F,F,T,F,T,T,T,F,T,
-                                                   T,T,T,T,T,T,T,T,T,T,T,T,T,F,T,T,T,T,T,T,T,T,T,T,F,F,T,F,F,F,F,T,T,F,F,T,
-                                                   T,F,F,F,T,T,T,T,T,T,T,T,T,F,T,T,T,T,T,T,T,F,T,F,T,T,T,T,T,F,T,T,T,F,T,T,
-                                                   T,T,T,T,T,T,T,F,F,T,T,T,T,T,T,T,F,T,T,T,T,F,T,F,T,T,T,T,T,T,T,T,T,T,T,F,
-                                                   T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,T,F,T,T,F,T,T,F,F,T,F,F,T,F,T,
-                                                   T,T,T,T,T,T,F,T,F,T,T,T,T,T,T,F,T,T,T,T,T,T,F,T,T,F,T,F,F,F,F,F,T,T,F,T,
-                                                   T,T,T,T,T,T,F,T,F,F,F,T,F,T,T,T,T,T,T,T,F,T,T,T,T,T,T,T,T,T,T,T,T,F,T,T)
-                          )
-
-ggplot(sig.diff.byRefChr, aes(x=RefChr_1,y=RefChr_2,fill = SignificantlyDifferent))+
-  geom_tile()+
-  facet_wrap(vars(Status))+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle=90))
-sig.diff.byRefChr %>% group_by(RefChr_1,RefChr_2,SignificantlyDifferent) %>% count() %>%
-  filter(SignificantlyDifferent == T) %>% mutate(percent = (n/4)*100) %>%
-ggplot(aes(x=RefChr_1,y=RefChr_2,fill = n))+
-  geom_tile()+
-  theme_bw()+
-  theme(axis.text.x = element_text(angle=90))
 
 gene_fractionation<-gene_fractionation %>% 
   mutate(RefChr = case_when(Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "01")[,7]) ~ "Chr01",
@@ -3595,6 +3505,8 @@ table(full.fractionation.status$M1.TimingNode, full.fractionation.status$M2.Timi
   xlab("M1")+ylab("M2")
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/timing.nodes.sharing.allGenomes.percent..png", device="png",dpi=300,height = 8, width = 8.5)
 
+write_tsv(full.fractionation.status, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/full.fractionation.status.tsv")
+
 #How is paraphyly split across lineages?
 
 paraphyly.M1<-filter(full.fractionation.status, M1.Timing == "paraphyly")
@@ -3619,20 +3531,23 @@ paraphyly.M1.NoZnZd<-filter(full.fractionation.status, M1.Timing.NoZnZd == "para
 paraphyly.M1.NoZnZd<-paraphyly.M1.NoZnZd %>% select(-c(contains("M2"),contains("Zn"),starts_with("ZdGigi."),starts_with("ZdMomo.")))
 paraphyly.M1.NoZnZd$paraphyly_type<-NA
 for(i in 1:nrow(paraphyly.M1.NoZnZd)){
-  paraphyly.M1.NoZnZd$paraphyly_type[i]<-paraphyly.M1.NoZnZd[i,] %>% as.data.frame() %>% select(c(ends_with(".M1"))) %>% select(where(~.x == 1)) %>% colnames() %>% str_remove(".M1") %>% paste(collapse = ":")
+  paraphyly.M1.NoZnZd$paraphyly_type[i]<-paraphyly.M1.NoZnZd[i,] %>% as.data.frame() %>% select(c(ends_with(".M1"))) %>% select(where(~.x == 1)) %>% colnames() %>% str_remove("[[.]]M1") %>% paste(collapse = ":")
 }
 paraphyly.M2.NoZnZd<-filter(full.fractionation.status, M2.Timing.NoZnZd == "paraphyly")
 paraphyly.M2.NoZnZd$paraphyly_type<-NA
-paraphyly.M2.NoZnZd<-paraphyly.M2.NoZnZd %>% select(-c(contains("M1"),contains("Zn"),starts_with("ZdGigi."),starts_with("ZdMomo.")))
+paraphyly.M2.NoZnZd<-paraphyly.M2.NoZnZd %>% select(-c(ends_with("M1"),starts_with("M1"),contains("Zn"),starts_with("ZdGigi."),starts_with("ZdMomo.")))
 for(i in 1:nrow(paraphyly.M2.NoZnZd)){
   paraphyly.M2.NoZnZd$paraphyly_type[i]<-paraphyly.M2.NoZnZd[i,] %>% as.data.frame() %>% select(c(ends_with(".M2"))) %>% select(where(~.x == 1)) %>% colnames() %>% str_remove(".M2") %>% paste(collapse = ":")
 }
+
+paraphyly.M1$paraphyly_type<-str_replace_all(paraphyly.M1$paraphyly_type, pattern = "Z62W.M1", replacement = "ZmM162W")
+paraphyly.M1.NoZnZd$paraphyly_type<-str_replace_all(paraphyly.M1.NoZnZd$paraphyly_type, pattern = "Z62W.M1", replacement = "ZmM162W")
 
 #Number of types of paraphyly:
 paraphyly.M1$paraphyly_type %>% unique() %>% length() #1847 paraphyly types, M1 all genomes
 paraphyly.M1.NoZnZd$paraphyly_type %>% unique() %>% length() #2354 paraphyly types, M1 no ZnZd (how'd it get worse? NA's in Zn and Zd probably)
 paraphyly.M2$paraphyly_type %>% unique() %>% length() #1267 paraphyly types, M2 all genomes
-paraphyly.M2.NoZnZd$paraphyly_type %>% unique() %>% length() #1863 paraphyly types, M2 noZnZd (a little bit better, but not much!)
+paraphyly.M2.NoZnZd$paraphyly_type %>% unique() %>% length() #1866 paraphyly types, M2 noZnZd (a little bit better, but not much!)
 
 
 paraphyly.M1.summary<-paraphyly.M1 %>% group_by(paraphyly_type) %>% count()
@@ -3652,21 +3567,21 @@ summary(paraphyly.M1.NoZnZd.summary$n)
 #1.000   1.000   1.000   2.647   1.000 204.000 
 summary(paraphyly.M2.NoZnZd.summary$n)
 #Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-#1.000   1.000   1.000   2.815   1.000 197.000 
+#1.000   1.000   1.000   2.811   1.000 197.000 
 
 #Removing Zn and Zd doesn't drastically change the average number of paraphyly patterns
 #(M1 max goes from 126 --> 135, M2 max goes from 59--> 83), likely due to fewer NAs tossing exons out
 
 #What's the number of genomes involved in a given paraphyly pattern?
-paraphyly.M1.summary<-paraphyly.M1.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
-paraphyly.M2.summary<-paraphyly.M2.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
+#paraphyly.M1.summary<-paraphyly.M1.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
+#paraphyly.M2.summary<-paraphyly.M2.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
 paraphyly.M1.NoZnZd.summary<-paraphyly.M1.NoZnZd.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
 paraphyly.M2.NoZnZd.summary<-paraphyly.M2.NoZnZd.summary %>% mutate(NumGenomesInvolved = str_split(paraphyly_type, ":",simplify = T)%>% length())
 
-summary(paraphyly.M1.summary$NumGenomesInvolved)
+#summary(paraphyly.M1.summary$NumGenomesInvolved)
 #Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 # 2.00    6.00   16.00   18.09   30.00   38.00  
-summary(paraphyly.M2.summary$NumGenomesInvolved)
+#summary(paraphyly.M2.summary$NumGenomesInvolved)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 #1.00    8.00   20.00   19.64   32.00   38.00 
 
@@ -3675,7 +3590,7 @@ summary(paraphyly.M1.NoZnZd.summary$NumGenomesInvolved)
 #2.00    6.00   16.00   16.72   28.00   34.00 
 summary(paraphyly.M2.NoZnZd.summary$NumGenomesInvolved)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-#1.00    7.00   18.00   17.33   28.00   34.00 
+#2.00    7.00   18.00   17.85   29.00   34.00 
 
 #Removing ZnZd changes the max (because 3 less genomes possible [38 --> 34])
 #The mean and median also drop by about 1, M2 becomes more like M1
@@ -3721,8 +3636,8 @@ detect_genome_in_paraphyly_type<-function(df){
                  ZxTIL18 = str_detect(paraphyly_type, "ZxTIL18"),
                  ZxTIL25 = str_detect(paraphyly_type, "ZxTIL25"))
   return(new_df)}
-paraphyly.M1.summary<-detect_genome_in_paraphyly_type(paraphyly.M1.summary)
-paraphyly.M2.summary<-detect_genome_in_paraphyly_type(paraphyly.M2.summary)
+#paraphyly.M1.summary<-detect_genome_in_paraphyly_type(paraphyly.M1.summary)
+#paraphyly.M2.summary<-detect_genome_in_paraphyly_type(paraphyly.M2.summary)
 
 paraphyly.M1.NoZnZd.summary<-detect_genome_in_paraphyly_type(paraphyly.M1.NoZnZd.summary)%>% select(-c("ZdGigi","ZdMomo",contains("Zn")))
 paraphyly.M2.NoZnZd.summary<-detect_genome_in_paraphyly_type(paraphyly.M2.NoZnZd.summary)%>% select(-c("ZdGigi","ZdMomo",contains("Zn")))
@@ -3779,19 +3694,19 @@ lapply(paraphyly.M2.NoZnZd.summary[,4:ncol(paraphyly.M2.NoZnZd.summary)], sum) %
   xlab("Number of Paraphyly Patterns Including Each Genome, M2")+ylab("")
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/paraphyly.M2.GenomesInvolved.NoZnZd.png", dpi=300, device="png",width=5,height=4)
 
-full.paraphyly<-full_join(x=paraphyly.M1.summary, y=paraphyly.M2.summary, by="paraphyly_type", suffix = c(".M1",".M2"))
+#full.paraphyly<-full_join(x=paraphyly.M1.summary, y=paraphyly.M2.summary, by="paraphyly_type", suffix = c(".M1",".M2"))
 full.paraphyly.NoZnZd<-full_join(x=paraphyly.M1.NoZnZd.summary, y=paraphyly.M2.NoZnZd.summary, by="paraphyly_type", suffix = c(".M1",".M2"))
 
 #are there any patterns that are present in M1 or M2 but not the other?
-nrow(full.paraphyly) #3049
-filter(full.paraphyly, is.na(n.M1) | is.na(n.M2)) %>% nrow() #filters from 3049 patterns to 2984 (so x patterns shared between M1 and M2)
-filter(full.paraphyly,  is.na(n.M2)) %>% nrow() #is there in M1 but not M2 #1782
-filter(full.paraphyly, is.na(n.M1)) %>% nrow() #is there in M2 but not M1 #1202
+#nrow(full.paraphyly) #3049
+#filter(full.paraphyly, is.na(n.M1) | is.na(n.M2)) %>% nrow() #filters from 3049 patterns to 2984 (so x patterns shared between M1 and M2)
+#filter(full.paraphyly,  is.na(n.M2)) %>% nrow() #is there in M1 but not M2 #1782
+#filter(full.paraphyly, is.na(n.M1)) %>% nrow() #is there in M2 but not M1 #1202
 
-nrow(full.paraphyly.NoZnZd) #4127
-filter(full.paraphyly.NoZnZd, is.na(n.M1) | is.na(n.M2)) %>% nrow() #filters from 4127 patterns to 4037 (so x patterns shared between M1 and M2)
-filter(full.paraphyly.NoZnZd,  is.na(n.M2))  %>% nrow()#is there in M1 but not M2 #2264
-filter(full.paraphyly.NoZnZd, is.na(n.M1))   %>% nrow()#is there in M2 but not M1 #1773
+nrow(full.paraphyly.NoZnZd) #4033
+filter(full.paraphyly.NoZnZd, is.na(n.M1) | is.na(n.M2)) %>% nrow() #filters from 4033 patterns to 3846 (so x patterns shared between M1 and M2)
+filter(full.paraphyly.NoZnZd,  is.na(n.M2))  %>% nrow()#is there in M1 but not M2 #2167
+filter(full.paraphyly.NoZnZd, is.na(n.M1))   %>% nrow()#is there in M2 but not M1 #1679
 
 #What are the patterns that are above the 3rd quartile in terms of frequency? Still may be too large to look at...
 paraphyly.M1.NoZnZd.summary$NumGenomesInvolved %>% summary()
@@ -3999,8 +3914,20 @@ Timing.M1 %>% group_by(M1.TimingNode.NoZnZd) %>% count() %>% mutate(PercentofAll
 Timing.M2 %>% group_by(M2.TimingNode.NoZnZd) %>% count() %>% mutate(PercentofAllExons = (n/69269)*100, 
                                                                     PercentofCompletelyAlignedM2Exons = (n/44321)*100)%>%
   write_tsv("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/Timing.M2.NoZnZd.tsv")
-Timing.M1 %>% group_by(M1.TimingNode.NoZnZd) %>% count() %>% filter(!M1.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M1.TimingNode.NoZnZd)) %>% select(n) %>% pull() %>% sum()
-Timing.M2 %>% group_by(M2.TimingNode.NoZnZd) %>% count() %>% filter(!M2.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M2.TimingNode.NoZnZd)) %>% select(n) %>% pull() %>% sum()
+Timing.M1 %>% group_by(M1.TimingNode.NoZnZd) %>% count() %>% filter(!M1.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M1.TimingNode.NoZnZd)) %>% select(n) %>% pull() %>% sum() #2728
+Timing.M2 %>% group_by(M2.TimingNode.NoZnZd) %>% count() %>% filter(!M2.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M2.TimingNode.NoZnZd)) %>% select(n) %>% pull() %>% sum() #1288
+
+
+Timing.M1 %>% filter(!M1.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M1.TimingNode.NoZnZd)) %>% select(Gene_ID) %>% unique()
+#1,132 genes
+Timing.M2 %>% filter(!M2.TimingNode.NoZnZd %in% c("N0_basal","N0_Retained","N1_Tripsacum","N1_Zea","paraphyly") & !is.na(M2.TimingNode.NoZnZd)) %>% select(Gene_ID) %>% unique()
+#596 genes
+
+
+
+
+
+
 
 ####VCF DELETION ANALYSIS####
 deletion_stats<-tibble(RefChr = as.character(c(2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9)),
@@ -4012,7 +3939,7 @@ deletion_stats<-tibble(RefChr = as.character(c(2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9))
                        N_exactBoundaries =c(5978,7352,8041,8733,5626,7226,1849,2014,4521,4831,3277,2781,2021,2374,4471,4452), #number of deletions completely within the boundaries of an exon
                        N_inframe =c(1272,1823,1716,2184,1147,1691,453,615,1051,1100,670,674,415,610,942,989), #number of deletions that are in frame
                        N_frameshift =c(4706,5529,6325,6549,4479,5535,1396,1399,3470,3731,2607,2107,1606,1764,3529,3463),#number of frame shifting deletions
-                       ) 
+) 
 deletion_stats<-mutate(deletion_stats, Percent_single_dels = (N_single_dels/N_exonic_dels)*100,
                        Percent_overlapping_dels = (N_overlapping_dels/N_exonic_dels)*100,
                        Percent_exactBoundaries = (N_exactBoundaries/N_exonic_dels)*100,
@@ -4129,5 +4056,129 @@ tibble(RefChr = rep(deletion_stats$RefChr,4),
   ggtitle("Types of Deletions")
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plots/vcf-dels.TypeOfDeletion.violin.png",device = "png",dpi=300, width = 4, height = 4)
 
+####How much paraphyly related to multiple deletions?####
+full.fractionation.status %>% select(contains("ID")) %>% colnames()
+#read in the special bed files
+for(i in 2:9){
+  assign(paste0("exonicBed_M1_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin1.del.exonic.bed"),
+                                               col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                             "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                             "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                             "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("exonicBed_M2_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin2.del.exonic.bed"),
+                                                 col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                               "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                               "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                               "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("exactBed_M1_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin1.del.exact.exonic.bed"),
+                                                col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                              "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                              "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                              "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("exacted_M2_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin2.del.exact.exonic.bed"),
+                                               col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                             "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                             "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                             "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("frameshiftBed_M1_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin1.del.exact.exonic.frameshift.bed"),
+                                                     col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                                   "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                                   "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                                   "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("frameshiftBed_M2_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin2.del.exact.exonic.frameshift.bed"),
+                                                     col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                                   "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                                   "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                                   "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("inframeBed_M1_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin1.del.exact.exonic.divisibleby3.bed"),
+                                                  col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                                "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                                "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                                "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+  assign(paste0("inframeBed_M2_Chr0",i), read_tsv(paste0("/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/chr",i,".bin2.del.exact.exonic.divisibleby3.bed"),
+                                                  col_names = c("RefChr","Start","Stop","ID","Qual","Strand","RefChr.del","Start.del","Stop.del","REF","ALT","QUAL.del",
+                                                                "TdFL","TdKS","ZdGigi_4to1","ZdMomo_4to1","ZhRIMHU001","ZmB73","ZmB97","ZmCML103","ZmCML228","ZmCML247","ZmCML277",
+                                                                "ZmCML322","ZmCML333","ZmCML52","ZmCML69","ZmHP301","ZmIL14H","ZmKi11","ZmKi3","ZmKy21","ZmM162W","ZmM37W","ZmMS71",
+                                                                "ZmMo18W","ZmNC350","ZmNC358","ZmOh43","ZmOh7b","ZmP39","ZmTx303","ZmTzi8","ZnPI615697_4to1","ZvTIL01","ZvTIL11","ZxTIL18","ZxTIL25")))
+}
+#create vectors of IDs for each deletion type
+single_deletion.M1<-c()
+single_deletion.M2<-c()
+multiple_deletion.M1<-c()
+multiple_deletion.M2<-c()
+frameshift_deletion.M1<-c()
+frameshift_deletion.M2<-c()
+inframe_deletion.M1<-c()
+inframe_deletion.M2<-c()
 
+for(i in 2:9){
+  single_deletion.M1<-c(single_deletion.M1, 
+                        pull(subset(select(get(paste0("exonicBed_M1_Chr0",i)), ID),
+                               !(duplicated(select(get(paste0("exonicBed_M1_Chr0",i)), ID)) | duplicated(select(get(paste0("exonicBed_M1_Chr0",i)), ID), 
+                                                                   fromLast = T))))
+  )
+  single_deletion.M2<-c(single_deletion.M2, 
+                        pull(subset(select(get(paste0("exonicBed_M2_Chr0",i)), ID),
+                               !(duplicated(select(get(paste0("exonicBed_M2_Chr0",i)), ID)) | duplicated(select(get(paste0("exonicBed_M2_Chr0",i)), ID), 
+                                                                                                         fromLast = T))))
+  )
+  multiple_deletion.M1<-c(multiple_deletion.M1, 
+                        pull(subset(select(get(paste0("exonicBed_M1_Chr0",i)), ID),
+                               (duplicated(select(get(paste0("exonicBed_M1_Chr0",i)), ID)) | duplicated(select(get(paste0("exonicBed_M1_Chr0",i)), ID), 
+                                                                                                         fromLast = T))))
+  )
+  multiple_deletion.M2<-c(multiple_deletion.M2, 
+                        pull(subset(select(get(paste0("exonicBed_M2_Chr0",i)), ID),
+                               (duplicated(select(get(paste0("exonicBed_M2_Chr0",i)), ID)) | duplicated(select(get(paste0("exonicBed_M2_Chr0",i)), ID), 
+                                                                                                         fromLast = T))))
+  )
+  frameshift_deletion.M1<-c(frameshift_deletion.M1, 
+                        select(get(paste0("frameshiftBed_M1_Chr0",i)), ID) %>% unique() %>% pull()
+  )
+  frameshift_deletion.M2<-c(frameshift_deletion.M2, 
+                            select(get(paste0("frameshiftBed_M2_Chr0",i)), ID) %>% unique() %>% pull()
+  )
+  inframe_deletion.M1<-c(inframe_deletion.M1, 
+                         select(get(paste0("inframeBed_M1_Chr0",i)), ID) %>% unique() %>% pull()  )
+  inframe_deletion.M2<-c(inframe_deletion.M2, 
+                         select(get(paste0("inframeBed_M2_Chr0",i)), ID) %>% unique() %>% pull()  )
+}
+
+#add deletion type to full_fractionation
+full.fractionation.status<-full.fractionation.status %>% 
+  mutate(singleVSmultiple_dels.M1 = case_when(ID %in% single_deletion.M1 ~ "single",
+                                              ID %in% multiple_deletion.M1 ~ "multiple"),
+         singleVSmultiple_dels.M2 = case_when(ID %in% single_deletion.M2 ~ "single",
+                                              ID %in% multiple_deletion.M2 ~ "multiple"),
+         contains_inframe_dels.M1 = case_when(ID %in% inframe_deletion.M1 ~ T,
+                                              .default = F),
+         contains_inframe_dels.M2 = case_when(ID %in% inframe_deletion.M2 ~ T,
+                                              .default = F),
+         contains_frameshift_dels.M1 = case_when(ID %in% frameshift_deletion.M1 ~ T,
+                                                 .default = F),
+         contains_frameshift_dels.M2 = case_when(ID %in% frameshift_deletion.M2 ~ T,
+                                                 .default = F))
+full.fractionation.status<-full.fractionation.status %>% mutate(RefChr = case_when(Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "01")[,7]) ~ "Chr01",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "02")[,7]) ~ "Chr02",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "03")[,7]) ~ "Chr03",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "04")[,7]) ~ "Chr04",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "05")[,7]) ~ "Chr05",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "06")[,7]) ~ "Chr06",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "07")[,7]) ~ "Chr07",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "08")[,7]) ~ "Chr08",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "09")[,7]) ~ "Chr09",
+                                                      Gene_ID %in% pull(filter(ref_Sb313.cds,CHROM == "10")[,7]) ~ "Chr10"))
+filter(full.fractionation.status, 
+       (M1.TimingNode.NoZnZd == "paraphyly") & !RefChr %in% c("Chr01","Chr10") & !is.na(RefChr)) %>% 
+  select(contains("dels.M1")) %>% 
+  group_by(singleVSmultiple_dels.M1, contains_inframe_dels.M1, contains_frameshift_dels.M1) %>%
+  count()
+#How can you have paraphyly if there's no deletion? 
+filter(full.fractionation.status, is.na(singleVSmultiple_dels.M1)& 
+         isFALSE(contains_inframe_dels.M1) &
+         isFALSE(contains_frameshift_dels.M1)) %>% view()
+#must be differences between the GVCF and the vcf (maybe they didn't make a cutoff? )
+#shows that both are lost for most genomes, but a few genomes have M1 retained (hence paraphyly)
+#but the gene ids are not in exonic bed files
+#also how do you have a false/false for inframe deletions vs. frameshift if there's a deletion identified?
 
