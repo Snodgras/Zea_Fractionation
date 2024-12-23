@@ -1,0 +1,100 @@
+---
+title: ""
+author: "Baoxing Song"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+## get all the total TFBS size 
+
+
+Download the maize B73 V4 data and sorghum genome file
+```
+wget https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0.fa.gz
+wget https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3.gz
+wget https://data.cyverse.org/dav-anon/iplant/home/mwoodhouse/Sbicolor_313_v3.0.fa.gz
+gunzip *gz
+
+```
+
+Using AnchorWave to extract full-length CDS. \
+NOTE: please do NOT use CDS extracted using other software and do NOT use the output full-length CDS file for other purpose. Since AnchorWave filtered some CDS records to minimum the impact of minimap2 limitation on genome alignment that "Minimap2 often misses small exons" (https://github.com/lh3/minimap2#limitations)
+```
+anchorwave gff2seq -r Zm-B73-REFERENCE-NAM-5.0.fa -i Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3 -o cds.fa
+```
+
+
+use minimap2 (https://github.com/lh3/minimap2) to map the extracted sequence to the reference genome sequence and synthesis genomes
+```
+minimap2 -x splice -t 11 -k 12 -a -p 0.4 -N 20 Sbicolor_313_v3.0.fa cds.fa > cds.sam
+minimap2 -x splice -t 11 -k 12 -a -p 0.4 -N 20 Zm-B73-REFERENCE-NAM-5.0.fa  cds.fa > ref.sam
+```
+
+```
+/usr/bin/time anchorwave proali -i Zm-B73-REFERENCE-NAM-5.0_Zm00001eb.1.gff3 -as cds.fa -r Zm-B73-REFERENCE-NAM-5.0.fa -a cds.sam -ar ref.sam -s Sbicolor_313_v3.0.fa -n anchorwave.anchors -R 1 -Q 2 -o anchorwave.maf -t 32 >anchorwave.log 2>&1
+```
+
+
+
+```{r warning=FALSE, fig.height = 40, fig.width = 60}
+# here I am using the Cairo library to compile the output plot. The output file looks better than native library, but it a little bit of mass up the Rmarkdown output file.
+library(compiler)
+enableJIT(3)
+library(ggplot2)
+library("Cairo")
+
+changetoM <- function ( position ){
+  position=position/1000000;
+  paste(position, "M", sep="")
+}
+
+
+
+data =read.table("anchorwave.anchors", header=T)
+
+data = data[which(data$refChr %in% c("chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10" )),]
+data = data[which(data$queryChr %in% c("Chr01", "Chr02", "Chr03", "Chr04", "Chr05", "Chr06", "Chr07", "Chr08", "Chr09", "Chr10" )),]
+data$refChr = factor(data$refChr, levels=c("chr1", "chr2", "chr3", "chr4", "chr5", "chr6", "chr7", "chr8", "chr9", "chr10" ))
+data$queryChr = factor(data$queryChr, levels=c("Chr01", "Chr02", "Chr03", "Chr04", "Chr05", "Chr06", "Chr07", "Chr08", "Chr09", "Chr10" ))
+
+data$strand = factor(data$strand)
+data = data[which(data$gene != "interanchor"),]
+p = ggplot(data=data, aes(x=queryStart, y=referenceStart))+geom_point(size=2, aes(color=strand), alpha=0.4)+facet_grid(refChr~queryChr, scales="free", space="free" )+ theme_grey(base_size = 60) +
+  labs(x="Sorghum", y="Maize")+ scale_x_continuous(labels=changetoM) + scale_y_continuous(labels=changetoM) +
+  theme(axis.line = element_blank(),
+        panel.background = element_blank(),
+        panel.border = element_rect(fill=NA,color="black", size=0.5, linetype="solid"),
+        axis.text.y = element_text( colour = "black"),
+        legend.position='right',
+        axis.text.x = element_text(angle=300, hjust=0, vjust=1, colour = "black") )
+CairoPDF(file="align.pdf",width = 90, height = 52)
+p
+dev.off()
+```
+
+Reformat the alignment into sam and cram format \
+Any tool that works with bam file should also work well with cram file
+```
+maf-convert sam anchorwave.maf > anchorwave.sam
+cat anchorwave.sam |  sed 's/[0-9]\+H//g' | samtools view -O CRAM --reference Zm-B73-REFERENCE-NAM-5.0.fa - | samtools sort - > anchorwave.cram
+samtools index anchorwave.cram
+```
+
+
+
+
+Transform the alignment as using sorghum as reference
+```
+cat anchorwave.maf | python2 ../NAM_anchorwave/AnchorWave/scripts/anchorwave-maf-swap.py > anchorwave.swap.maf
+maf-convert sam anchorwave.swap.maf > anchorwave.swap.sam
+sort -S400G -snk3 -k4 --parallel=80 anchorwave.swap.sam | sed 's/[0-9]\+H//g' | samtools view -O CRAM  --reference Sbicolor_313_v3.0.fa -  > anchorwave.swap.cram
+samtools index anchorwave.swap.cram
+```
+
+
+anchorwave.cram could be loaded into IGV together with Zm-B73-REFERENCE-NAM-5.0.fa for visualization. \
+anchorwave.swap.cram could be loaded into IGV together with Sbicolor_313_v3.0.fa for visualization.
