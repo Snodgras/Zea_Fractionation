@@ -431,7 +431,8 @@ bedtools sort -i test.Sb313.CDS.bed | bedtools merge -c 4 -o distinct -i - > mer
 
 ```
 
-##Run Anchorwave
+## Run Anchorwave
+I used v1.0.1
 Make sure that Av is 1:1 and the rest is 2:1
 ```03.runAnchorWave.Tripsacinae.sh
 #!/bin/bash
@@ -1487,6 +1488,95 @@ When done using RStudio Server, terminate the job by:
       scancel -f 5711897
 
 ```
+## Using the GVCFs to look at exonic deletions
+Using the `Sb313_${GENOME}_Chr[01-10].bin[1-2].dels.bed` in the `/tripsacinae-sb_split_mafs` directory
+Move them to: `Fractionation/deletion_beds/`
+Sorghum coordinates: Chr, Start, stop, Ref allele, alt allele 1, alt allele 2, length of deletion, genome genotype
+
+```
+#make a single file for each tripsacinae subgenome of all the deletions occurring relative to sorghum
+
+for g in TdKS ZdGigi_4to1 ZdMomo_4to1 ZnPI615697_4to1  TdFL ZdGigi ZdMomo ZhRIMHU001 ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ZnPI615697 ZvTIL01 ZvTIL11 ZxTIL18 ZxTIL25 ; do 
+	for b in bin1 bin2 ; do
+		for c in 01 02 03 04 05 06 07 08 09 10 ; do 
+			cat Sb313_${g}_Chr${c}.${b}.dels.bed >> Sb313_${g}_allChr.${b}.dels.bed
+		done
+	done
+done
+
+ml bedtools2
+bedtools intersect -wao -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed \
+	-b Sb313_ZmB73_allChr.bin1.dels.bed Sb313_ZmB97_allChr.bin1.dels.bed Sb313_ZmCML333_allChr.bin1.dels.bed Sb313_ZxTIL18_allChr.bin1.dels.bed \
+	-names ZmB73 ZmB97 ZmCML333 ZxTIL18 > test.tsv
+
+#do it for real
+bedtools intersect -wao -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed \
+	-b Sb313_TdFL_allChr.bin1.dels.bed Sb313_ZmCML322_allChr.bin1.dels.bed Sb313_ZmNC350_allChr.bin1.dels.bed \
+	Sb313_TdKS_allChr.bin1.dels.bed Sb313_ZmCML333_allChr.bin1.dels.bed Sb313_ZmNC358_allChr.bin1.dels.bed \
+	Sb313_ZdGigi_4to1_allChr.bin1.dels.bed Sb313_ZmCML52_allChr.bin1.dels.bed Sb313_ZmOh43_allChr.bin1.dels.bed \
+	Sb313_ZmCML69_allChr.bin1.dels.bed Sb313_ZmOh7b_allChr.bin1.dels.bed \
+	Sb313_ZdMomo_4to1_allChr.bin1.dels.bed Sb313_ZmHP301_allChr.bin1.dels.bed Sb313_ZmP39_allChr.bin1.dels.bed \
+	Sb313_ZmIL14H_allChr.bin1.dels.bed Sb313_ZmTx303_allChr.bin1.dels.bed \
+	Sb313_ZhRIMHU001_allChr.bin1.dels.bed Sb313_ZmKi11_allChr.bin1.dels.bed Sb313_ZmTzi8_allChr.bin1.dels.bed \
+	Sb313_ZmB73_allChr.bin1.dels.bed Sb313_ZmKi3_allChr.bin1.dels.bed \
+	Sb313_ZmB97_allChr.bin1.dels.bed Sb313_ZmKy21_allChr.bin1.dels.bed \
+	Sb313_ZmCML103_allChr.bin1.dels.bed Sb313_ZmM162W_allChr.bin1.dels.bed Sb313_ZvTIL01_allChr.bin1.dels.bed \
+	Sb313_ZmCML228_allChr.bin1.dels.bed Sb313_ZmM37W_allChr.bin1.dels.bed Sb313_ZvTIL11_allChr.bin1.dels.bed \
+	Sb313_ZmCML247_allChr.bin1.dels.bed Sb313_ZmMo18W_allChr.bin1.dels.bed Sb313_ZxTIL18_allChr.bin1.dels.bed \
+	Sb313_ZmCML277_allChr.bin1.dels.bed Sb313_ZmMS71_allChr.bin1.dels.bed Sb313_ZxTIL25_allChr.bin1.dels.bed \
+	-names TdFL ZmCML322 ZmNC350 TdKS ZmCML333 ZmNC358 ZdGigi_4to1 ZmCML52 ZmOh43 ZmCML69 ZmOh7b ZdMomo_4to1 ZmHP301 ZmP39 ZmIL14H ZmTx303 ZhRIMHU001 ZmKi11 ZmTzi8 ZmB73 ZmKi3 ZmB97 ZmKy21 ZmCML103 ZmM162W ZvTIL01 ZmCML228 ZmM37W ZvTIL11 ZmCML247 ZmMo18W ZxTIL18 ZmCML277 ZmMS71 ZxTIL25\
+	 > exonic_M1_deletions.tsv
+
+bedtools intersect -wao -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed \
+	-b Sb313_TdFL_allChr.bin2.dels.bed Sb313_ZmCML322_allChr.bin2.dels.bed Sb313_ZmNC350_allChr.bin2.dels.bed \
+	Sb313_TdKS_allChr.bin2.dels.bed Sb313_ZmCML333_allChr.bin2.dels.bed Sb313_ZmNC358_allChr.bin2.dels.bed \
+	Sb313_ZdGigi_4to1_allChr.bin2.dels.bed Sb313_ZmCML52_allChr.bin2.dels.bed Sb313_ZmOh43_allChr.bin2.dels.bed \
+	Sb313_ZmCML69_allChr.bin2.dels.bed Sb313_ZmOh7b_allChr.bin2.dels.bed \
+	Sb313_ZdMomo_4to1_allChr.bin2.dels.bed Sb313_ZmHP301_allChr.bin2.dels.bed Sb313_ZmP39_allChr.bin2.dels.bed \
+	Sb313_ZmIL14H_allChr.bin2.dels.bed Sb313_ZmTx303_allChr.bin2.dels.bed \
+	Sb313_ZhRIMHU001_allChr.bin2.dels.bed Sb313_ZmKi11_allChr.bin2.dels.bed Sb313_ZmTzi8_allChr.bin2.dels.bed \
+	Sb313_ZmB73_allChr.bin2.dels.bed Sb313_ZmKi3_allChr.bin2.dels.bed \
+	Sb313_ZmB97_allChr.bin2.dels.bed Sb313_ZmKy21_allChr.bin2.dels.bed \
+	Sb313_ZmCML103_allChr.bin2.dels.bed Sb313_ZmM162W_allChr.bin2.dels.bed Sb313_ZvTIL01_allChr.bin2.dels.bed \
+	Sb313_ZmCML228_allChr.bin2.dels.bed Sb313_ZmM37W_allChr.bin2.dels.bed Sb313_ZvTIL11_allChr.bin2.dels.bed \
+	Sb313_ZmCML247_allChr.bin2.dels.bed Sb313_ZmMo18W_allChr.bin2.dels.bed Sb313_ZxTIL18_allChr.bin2.dels.bed \
+	Sb313_ZmCML277_allChr.bin2.dels.bed Sb313_ZmMS71_allChr.bin2.dels.bed Sb313_ZxTIL25_allChr.bin2.dels.bed \
+	-names TdFL ZmCML322 ZmNC350 TdKS ZmCML333 ZmNC358 ZdGigi_4to1 ZmCML52 ZmOh43 ZmCML69 ZmOh7b ZdMomo_4to1 ZmHP301 ZmP39 ZmIL14H ZmTx303 ZhRIMHU001 ZmKi11 ZmTzi8 ZmB73 ZmKi3 ZmB97 ZmKy21 ZmCML103 ZmM162W ZvTIL01 ZmCML228 ZmM37W ZvTIL11 ZmCML247 ZmMo18W ZxTIL18 ZmCML277 ZmMS71 ZxTIL25\
+	 > exonic_M2_deletions.tsv
+
+```
+how many cds entries have at least one deletion in any of the query genomes relative to sorghum?
+```
+#awk -v OFS='\t' '$16 > 0 {print $0}' test.tsv | wc -l
+
+awk -v OFS='\t' '$16 > 0 {print $0}' exonic_M1_deletions.tsv | wc -l
+awk -v OFS='\t' '$16 > 0 {print $0}' exonic_M2_deletions.tsv | wc -l
+```
+how many cds entries have no deletions in any of the query genomes relative to sorghum? 
+```
+#awk -v OFS='\t' '$16 == 0 {print $0}' test.tsv | wc -l
+
+awk -v OFS='\t' '$16 == 0 {print $0}' exonic_M1_deletions.tsv | wc -l
+awk -v OFS='\t' '$16 == 0 {print $0}' exonic_M2_deletions.tsv | wc -l
+```
+how many deletions overlapping exons have an overlap length divisible by 3? 
+```
+#field 16 is the length of overlap between the exon and the deletion
+#I think it makes sense to look at the overlap with the exon ($16) rather than the length of the deletion itself ($14)
+#awk -v OFS='\t' '$16 > 0 && $16 % 3 == 0 {print $0}' test.tsv | wc -l
+
+awk -v OFS='\t' '$16 > 0 && $16 % 3 == 0 {print $0}' exonic_M1_deletions.tsv | wc -l
+awk -v OFS='\t' '$16 > 0 && $16 % 3 == 0 {print $0}' exonic_M2_deletions.tsv | wc -l
+```
+
+Characterizing deletions interactively in R:
+```
+#running 3 days [Wed 12:20 - Sat 12:20]
+ssh -N -L 8787:nova21-14:51933 snodgras@nova.its.iastate.edu
+3dUKxPrSFp2KAehqWFri
+```
+
+
 
 
 ## To Use the VCFs for identifying multiple origins from the GVCFs
@@ -2312,7 +2402,6 @@ muscle -in ${geneid}.bin2.cds.fasta  -out ${geneid}.bin2.cds.aln.fasta  -maxiter
 
 ```
 
-
 Need to do a check to see if I should push it through to the dN/dS step
 See if there's a bunch of missing introns
 
@@ -2331,10 +2420,6 @@ grep -f Yin2022MBE.SbGeneIDs.txt ref_Sb313.geneids.txt > shared_geneIDs.txt
 
 ```
 Of out 12,169 ref gene models and the 4,578 genes in Yin et al 2022, 3,195 genes are shared
- 
-
-
-
 
 
 This is how you do it, but with disregard to how many exons you're pulling out (aka pulling all exons out and putting them all in the same fasta)
@@ -2396,179 +2481,224 @@ if [ i != 10 ] ; then sed -i "s/Chr01/Chr0${i}/g" slurm_11.${i}.maf2fasta.sh ; e
 if [ i != 10 ] ; then sed -i "s/cds\.01\.bed/cds\.0${i}\.bed" slurm_11.${i}.maf2fasta.sh ; else sed -i "s/cds\.01\.bed/cds\.${i}\.bed" slurm_11.${i}.maf2fasta.sh ; fi
 done
  ```
-            
- 
 
+## Gene Expression Analysis
+### Get sorghum annotations on query genome coordinates
+The following would only work if AnchorWave was post-version 1.2.3
+_Code adopted from `https://gist.github.com/mcstitzer/e24daa25032e2d2243b3ad34a93c2ba4`_
 
+My version of AnchorWave was 1.0.1
 
+My version of AnchorWave was 1.0.1
+So I will use the code in MAFtoChain.cpp from Mohamed in Buckler lab
+It should generate a chain file that CrossMap can use to liftover coordinates (like in the gist from Michelle)
 
-
-
-
-
-
-
-_OLD METHOD_
-### test
+0. Compile C script
 ```
-mkdir test_vcf2bed
-grep "^##" -v chr10.bin2.indelonly_reformatted.vcf > test_vcf2bed/chr10.bin2.headerless.indelonly.vcf
-
-cd test_vcf2bed
-
-#this takes the headerless vcf and checks the alt allele; at least 1 ALT has to be smaller in length than the REF allele
-head -n 1 chr10.bin2.headerless.indelonly.vcf > chr10.bin2.delonly.vcf
-cat chr10.bin2.headerless.indelonly.vcf | \
-awk -v OFS='\t' '{split($5,a,/,/); if(length(a[1]) < length($4) || (length(a[2]) < length($4) && a[2] != "")) print $0}' - >> chr10.bin2.delonly.vcf
-
-#but sometimes this can be insertions+del or deletions of different lengths
-#so next need each ALT on its own line and change the genotypes accordingly? 
-
-#makes it a bed with the stop being the largest possible of the two alt alleles
-awk -v OFS='\t' '{split($5,a,/,/); 
-	if(length($4) - length(a[1]) >= length($4) - length(a[2])) 
-		s=(length($4) - length(a[1])); else s=length($4) - length(a[2]);
-		print $1,$2,$2+s,$4,$5,$6,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44}' chr10.bin2.delonly.vcf > chr10.bin2.delonly.bed
-
-#how may instances of insertions and deletions as alt alleles for the same ref pos
-awk -v OFS='\t' '{split($5,a,/,/); if(length(a[1]) < length($4) && length(a[2]) < length($4)) print $0}' chr10.bin2.delonly.bed | wc -l 
-#number that are only deletions for both ALT alleles or only have 1 deletion ALT allele
-258342
-wc -l chr10.bin2.delonly.bed #total number of ref positions
-277868 #includes header line
-
-19525 instances where there's an insertion and deletion alt allele
+g++ -o MAFtoChain -fopenmp MAFtoChain.cpp
 ```
 
+1. Run MAFtoChain.cpp to convert maf to chain
+```
+#./MAFtoChain [-t <num_threads>] <MAF filename>
 
-## Compare numbers of deletions that are
-*Test this on a test VCF first*
-### exonic vs. non-exonic
-#### test
+```
+
+Test case:
+```
+# input maf files named genome_sorghumChr.bin.maf
+# output chain files named genome_sorghumChr.bin.chain
+
+mkdir NAM_Sb313_chain_from_maf
+
+./MAFtoChain -t 8 /work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/ZmB73_Chr10.bin1.maf > ZmB73_Chr10.bin1.chain
+
+```
+
+Run on full NAM mafs:
+```
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do
+			./MAFtoChain -t 8 /work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/${g}_${i}.${b}.maf > ${g}_${i}.${b}.chain
+		done ; 
+	done ; 
+done
+```
+
+3. Lift over coordinates from Sorghum to query
+```
+# input bed file of sorghum CDS per chromosome
+# use CrossMap
+
+pip3 install git+https://github.com/liguowang/CrossMap.git
+
+CrossMap region [chain file] [CDS bed file] {prints output to screen}
+```
+Note you'll have to add "Chr" in front of the chr number in the bed file for it to work
+Test Case: 
+```
+#test_chr10.ids is a list of ids from Sb313 chr10 that were retained in fractionation calls
+grep -f test_chr10.ids ../ref_Sb313.cds.10.bed | awk -v OFS='\t' '{print "Chr"$0}' - > test_chr10.bed
+
+awk -v OFS='t' '{print "Chr"$0}' ../ref_Sb313.cds.10.bed > ref_Sb313.cds.Chr10.bed
+#for test did not use -r which lowers the threshold for the map ratio
+CrossMap region -r 0.5 ZmB73_Chr10.bin1.chain ref_Sb313.cds.Chr10.bed ZmB73_Chr10.bin1.crossmap.tsv
+```
+`https://ensembl.sorghumbase.org/Sorghum_bicolor/Location/View?r=10%3A61171292-61171350;site=ensemblthis`
+`https://jbrowse.maizegdb.org/?data=B73&loc=chr5%3A67391411..67402170&tracks=gene_models_official%2Cgene_models_v4_json%2Cgene_models_v3_json%2Cgnomon_genes%2CB73_ref-B73_syntenome%2CPeptideAtlas_syntenome&highlight=`
+
+How to check instances where CrossMap finds alignment but we say there was fractionation?
+```
+#get questionable IDs you want to check
+#/work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/noZn_vcf/chr10.bin1.delonly.bed
+
+ml bedtools2
+head -n 1 /work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/noZn_vcf/chr10.bin1.delonly.bed > del_overlap.questionable.IDs.tsv
+grep -f questionable.IDs ../ref_Sb313.cds.10.bed | bedtools intersect -wao -a - -b /work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/noZn_vcf/chr10.bin1.delonly.bed  >> del_overlap.questionable.IDs.tsv
+```
+Every questionable deletion from the noZn vcf has a "." genotype for the B73 M1
+
+Check the GVCF calls
+```
+ml bcftools
+grep -f questionable.IDs ../ref_Sb313.cds.10.bed > questionable.IDs.bed
+bcftools view -R questionable.IDs.bed -v indel /work/LAS/mhufford-lab/snodgras/Fractionation/AnchorWave_output/tripsacinae-sb_split_mafs/GVCF/Sb313_ZmB73_Chr10.bin1.gvcf.gz
+```
+*explanation*
+Sobic.010G218400.1.v3.1.CDS.19
+	- GVCF: massive deletion at 113605362 (+) in B73 assembly [hundreds of bp in length]
+	- CrossMap: maps 113605352 to 62 in B73 (right up to where the massive deletion position in the GVCF)
+Sobic.010G216000.1.v3.1.CDS.2
+	- GVCF: large deletion at B73 111740064 (-) [hundreds of bp in length]
+	- CrossMap: maps 111740063 to 184 in B73 (+), again right on edge of deletion position
+Sobic.010G059700.1.v3.1.CDS.12
+	- GVCF: small deletion at B73 16112069 (-) [dozen bp in length]
+	- CrossMap:16112068..16112088 (-), again right on edge of deletion position
+Sobic.010G011200.1.v3.1.CDS.13
+	- GVCF: massive deletion at 27943281 in B73 (-) [hundreds of bp in length]
+	- CrossMap: 27943268..27943280 (+)
+Sobic.010G001000.1.v3.1.CDS.3
+	- GVCF: Small deletion at B73 31479998 (+) [dozens of bp in length]
+	- CrossMap: 31479998 to 31480000 (+)
+
+To run on all chain files
+```
+#assumes you've already done 10 for the test
+for i in 01 02 03 04 05 06 07 08 09 ; do 
+	awk -v OFS='\t' '{print "Chr"$0}' ../ref_Sb313.cds.${i}.bed > ref_Sb313.cds.Chr${i}.bed
+done
+
+#run Cross map
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			CrossMap region -r 0.5 ${g}_${i}.${b}.chain ref_Sb313.cds.${i}.bed ${g}_${i}.${b}.crossmap.tsv
+		done ; 
+	done ; 
+	echo Done with ${g}
+done
+```
+
+To filter for exons that would be called fractionated both in the original calls from GVCF and from CrossMap,
+run r script `FilterCrossMap.parallelable.R`
+
+#### Do the same thing but for whole gene coordinates (not just CDS)
+```
+tail -n +2 /work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/ref_gene_list.tsv | cut -f 2 > ref_gene_list.ids
+sed -i "s/.[0-9].v3.1/.v3.1/g" ref_gene_list.ids
+grep -f ref_gene_list.ids Sbicolor_313_v3.1.gene.gff3 | awk -v OFS='\t' '$3 == "gene" {print $1,$4,$5,$9,$7}' - > ref_Sb313_gene.bed
+
+awk -v OFS='\t' '$1 ~ "Chr" {print $0}' ref_Sb313_gene.bed > /work/LAS/mhufford-lab/snodgras/Fractionation/NAM_Sb313_chain_from_maf/ref_Sb313_gene.chronly.bed
+
+for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+	grep ${i} ref_Sb313_gene.chronly.bed > ref_Sb313_gene.${i}.bed
+done
+
+#run Cross map
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			CrossMap region -r 0.5 ${g}_${i}.${b}.chain ref_Sb313_gene.${i}.bed ${g}_${i}.${b}_gene.crossmap.tsv
+		done ; 
+	done ; 
+	echo Done with ${g}
+done
+```	
+
+See how the crossmap gene bed overlaps with NAM gffs
+
 ```
 ml bedtools2
 
-bedtools intersect -wa -wb -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.10.bed -b chr10.bin2.delonly.bed > chr10.bin2.del.exonic.bed
-bedtools intersect -v -wa -b /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.10.bed -a chr10.bin2.delonly.bed > chr10.bin2.del.nonexonic.bed
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	grep "gene" /work/LAS/mhufford-lab/snodgras/Fractionation/fullrun.2/genomeRepo/${g}/${g}-primary-transcript.gff | awk -v OFS='\t' '{print $1,$4,$5,$9,$7}' - > ${g}_gene.bed
+done
 
-#how many non-exonic deletions
-wc -l chr10.bin2.del.nonexonic.bed #270620
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			awk -v OFS='\t' '{print "chr"$0}' ${g}_${i}.${b}_gene.crossmap.tsv | bedtools intersect -wao -a - -b ${g}_gene.bed > ${g}_${i}.${b}_gene.crossmap.overlap.tsv
+		done
+	done
+done
+```
 
-#how many exonic deletions
-
-cut -f 7-47 chr10.bin2.del.exonic.bed | sort -k2,3 | uniq | wc -l 
-#7247
+For visualizing on the local (and not wanting to download 520 individual files)
+```
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			cat ${g}_${i}.${b}_gene.crossmap.overlap.tsv >> ${g}_allChr.${b}_gene.crossmap.overlap.tsv
+		done
+	done
+done
 
 ```
 
-### single deletions (biallelic) vs. nested (multi-allelic)
-#### test
-```
-#how many deletions per exon?
-cut -f 1-6 chr10.bin2.del.exonic.bed | sort | uniq | wc -l  
-#3825 unique exons have a deletion
-wc -l chr10.bin2.del.exonic.bed 
-# 26893 total number of exons x deletions intersecting them
+### Rna-seq reads to query genomes
 
-cut -f 4 chr10.bin2.del.exonic.bed | sort | uniq -u | wc -l #should be the number of exons that only intersect with 1 deletion (327)
-#get the number of times X number of deletions overlap within a single exon
-echo Number_of_Exons Number_of_OverLapping_Deletions > test.exonicDelOverlap.txt
-cut -f 4 chr10.bin2.del.exonic.bed | sort | uniq -c | sed 's/ //g' | sed 's/ID/ ID/g' | cut -f 1 -d " " | sort | uniq -c  >>test.exonicDelOverlap.txt
-#So 3498 exons have multiple deletion overlaps
+Data: `https://iastate.app.box.com/v/maizegdb-public/folder/323422074461`
 
-### NOTE: -c option in bedtools intersect will count the number of B entries that overlap with A entries
+### Quantify "expression" at genome regions
+```
+# cat all the exon/gene crossmap bed files for each genome/chromosome for Beibei
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			cat ${g}_${i}.${b}.crossmap.tsv >> ${g}_allChr.${b}_CDS.crossmap.tsv
+		done
+	done
+done
+
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for i in Chr01 Chr02 Chr03 Chr04 Chr05 Chr06 Chr07 Chr08 Chr09 Chr10 ; do 
+		for b in bin1 bin2 ; do 
+			cat ${g}_${i}.${b}_gene.crossmap.tsv >> ${g}_allChr.${b}_gene.crossmap.tsv
+		done
+	done
+done
+
+for g in ZmB73 ZmB97 ZmCML103 ZmCML228 ZmCML247 ZmCML277 ZmCML322 ZmCML333 ZmCML52 ZmCML69 ZmHP301 ZmIL14H ZmKi11 ZmKi3 ZmKy21 ZmM162W ZmM37W ZmMo18W ZmMS71 ZmNC350 ZmNC358 ZmOh43 ZmOh7b ZmP39 ZmTx303 ZmTzi8 ; do 
+	for b in bin1 bin2 ; do
+		gzip ${g}_allChr.${b}_gene.crossmap.tsv
+		gzip ${g}_allChr.${b}_CDS.crossmap.tsv
+	done
+done
 ```
 
-### within exon boundaries vs. extending past
+# Misc.
+
+Looking for UTR regions
 ```
+tail -n +2 /work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/ref_gene_list.tsv | cut -f 2 | grep -f - Sbicolor_313_v3.1.gene.gff3 | awk -v OFS='\t' '$3 ~ /UTR/ {print $1,$4,$5,$9,$7}' - > ref_Sb313.UTR.bed
 ml bedtools2
+awk -v OFS='\t' '{print "Chr"$0}' /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed | bedtools intersect -wa -wb -a - -b ref_Sb313.UTR.bed > ref_Sb313_cds_utr_overlap.tsv
 
-bedtools intersect -wa -wb -F 1 -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.10.bed -b chr10.bin2.delonly.bed > chr10.bin2.del.exact.exonic.bed
-wc -l chr10.bin2.del.exact.exonic.bed 
-#4505 chr10.bin2.del.exact.exonic.bed #total number of exons x deletions intersecting within boundaries
-cut -f 4 chr10.bin2.del.exact.exonic.bed | sort | uniq | wc -l #655 exons that have deletions within boundaries of start and stop
-cut -f 4 chr10.bin2.del.exact.exonic.bed | sort | uniq -u | wc -l #161 exons are within boundaries of an exon and are the only deletion within that exon
-cut -f 4 chr10.bin2.del.exact.exonic.bed  | sort | uniq -c | sed 's/ //g' | sed 's/ID/ ID/g' | cut -f 1 -d " " | sort | uniq -c
-
+#wc -l of cds.bed and overlap tsv show that only 265 CDS have overlaps with a UTR
+#to look at the size of the overlap
+awk -v OFS='\t' '{print "Chr"$0}' /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.bed | bedtools intersect -wao -a - -b ref_Sb313.UTR.bed | cut -f 12 | sort | uniq -c
 ```
-
-### in-frame deletions vs. frame shift
-```
-#Need to figure out how to get the length of the deletion here... might be easier to do $9-$8
-#awk -v OFS='\t' '{if($10 % 3 == 0)print $0}' chr10.bin2.del.exonic.bed > chr10.bin2.del.exonic.divisibleBy3.bed
-
-#Does the transition from vcf to bed cause an issue for 0 or 1 indexing? 
-#How will that affect the length calculation?
-awk -v OFS='\t' '{l = $9-$8 ; if(l % 3 == 0)print $0}' chr10.bin2.del.exact.exonic.bed > chr10.bin2.del.exact.exonic.divisibleBy3.bed
-
-#to see how many unique exons have multiple in frame deletions
-cut -f 4 chr10.bin2.del.exact.exonic.divisibleBy3.bed | sort | uniq -c #ranges from 1-36, 456 unique exons
-
-#to find the frame shifts
-awk -v OFS='\t' '{l = $9-$8 ; if(l % 3 != 0)print $0}' chr10.bin2.del.exact.exonic.bed > chr10.bin2.del.exact.exonic.frameshift.bed
-cut -f 4 chr10.bin2.del.exact.exonic.frameshift.bed | sort | uniq -c #1-50something, 525 unique exons
-
-#How many exons are in both lists (have both in frame and frame shift deletions)
-cut -f 4 chr10.bin2.del.exact.exonic.divisibleBy3.bed | grep -f - chr10.bin2.del.exact.exonic.frameshift.bed | cut -f 4 | sort | uniq | wc -l
-#326 (between 60 and 70% of the exons on each list)
-
-
-```
-
-### by exon order (more deletions towards the end of the gene model)
-
-## Summarize the above code in unix so smaller files can be uploaded to R to avoid slowing
-
-```10.vcfFilteringAndReformmating.sh
-#!/bin/bash
-vcf=$1 #like: chr10.bin2.headerless.indelonly.vcf 
-output=${vcf%.headerless.indelonly.vcf}
-chr=$2
-
-#filter out insertions
-head -n 1 ${vcf} > ${output}.delonly.vcf
-cat ${vcf}| \
-awk -v OFS='\t' '{split($5,a,/,/); if(length(a[1]) < length($4) || (length(a[2]) < length($4) && a[2] != "")) print $0}' - >> ${output}.delonly.vcf
-
-#makes it a bed with the stop being the end of the REF allele
-awk -v OFS='\t' '{split($5,a,/,/); 
-		print $1,$2,$2+length($4),$4,$5,$6,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45}' ${output}.delonly.vcf > ${output}.delonly.bed
-
-ml bedtools2
-
-#create exonic 
-bedtools intersect -wa -wb -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.${chr}.bed -b ${output}.delonly.bed > ${output}.del.exonic.bed
-
-#create exact exonic
-bedtools intersect -wa -wb -F 1 -a /work/LAS/mhufford-lab/snodgras/Fractionation/ref_Sb313.cds.${chr}.bed -b ${output}.delonly.bed > ${output}.del.exact.exonic.bed
-```
-
-To get the values:
-```
-#number exonic dels
-for i in *del.exonic.bed ; do echo $i ; cut -f 7-48 $i | sort -k2,3 | uniq | wc -l ; done
-#number of exons with deletion
-for i in *del.exonic.bed ; do echo $i ; cut -f 1-6 $i | sort |uniq | wc -l ; done
-#number of single deletions
-for i in *del.exonic.bed ; do echo $i ; cut -f 4 $i| sort | uniq -u | wc -l ; done
-#number of overlapping deletions
-for i in *del.exonic.bed ; do cut -f 4 $i | sort | uniq -c | sed 's/ //g' | sed 's/ID/ ID/g' | cut -f 1 -d " " | sort | uniq -c  >> ${i%.bed}.overlap.txt ;done
-awk '{print $1}' *del.exonic.overlap.txt #omit first line and sum the rest
-#number of deletions within the boundaries of an exon
-for i in *del.exact.exonic.bed ; do wc -l $i ; done
-
-#number in frame deletions
-for i in *exact.exonic.bed; do awk -v OFS='\t' '{l = $9-$8 ; if(l % 3 == 0)print $0}' $i > ${i%.bed}.divisibleby3.bed ;done
-wc -l *divisibleby3.bed 
-
-#number of frameshift deletions
-for i in *exact.exonic.bed; do awk -v OFS='\t' '{l = $9-$8 ; if(l % 3 != 0)print $0}' $i > ${i%.bed}.frameshift.bed ;done
-wc -l *frameshift.bed 
-```
-
-## Add deletion type to the fractionation status matrix
-
-
 
 
 
