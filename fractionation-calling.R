@@ -1223,6 +1223,45 @@ long_gene_fractionation %>% group_by(Status, Genome, Cutoff) %>% count() %>%
 ggsave("/work/LAS/mhufford-lab/snodgras/Fractionation/Fractionation_Plot/fractionationStatus.ByGene.Cutoff.NoZn.violinandscatter.png",
        device="png",dpi=300, width=9, height = 8)
 
+temp<-long_gene_fractionation %>% group_by(Status, Genome, Cutoff) %>% count() %>%
+  mutate(Percentage = (n/12169)*100) %>%
+  filter(str_detect(Genome,"Zn",negate = T) & !Genome %in% c("ZdGigi","ZdMomo") & str_detect(Status, "NA", negate = TRUE))
+percent_temp<-group_by(temp,Status, Cutoff) %>% 
+  summarize(mean_percent = mean(Percentage,na.rm=T),
+            sd_percent = sd(Percentage, na.rm = T),
+            n_percent = n(),
+            se_percent = sd_percent / sqrt(n_percent))
+
+temp %>% #filter(temp, Cutoff %in% c("only1", "all")) %>%
+  ggplot(aes(x=Cutoff, y=Percentage))+
+  geom_jitter(height = 0, width = 0.25, aes(shape = Status, color = Genome), alpha = 0.75)+
+  geom_line(data =percent_temp,
+            aes(x=Cutoff, y=mean_percent, group = Status, linetype = Status))+
+  scale_color_manual(values = genome_colors)+
+  guides(color="none")+
+  theme_bw()+ xlab("Number of Exons Fractionated in Gene")+
+  scale_x_discrete(labels = c("only1" = "At least 1",
+                              "third" = "1 / 3",
+                              "half" = "1 / 2",
+                              "all" = "All"))+
+  scale_shape_discrete(labels = c("Both_Retained"= "Both Retained",
+                            "M1_Retained" = "M1 Retained",
+                            "M2_Retained" = "M2 Retained",
+                            "Both_Lost" = "Both Lost"))+
+  scale_linetype_discrete(labels = c("Both_Retained"= "Both Retained",
+                                  "M1_Retained" = "M1 Retained",
+                                  "M2_Retained" = "M2 Retained",
+                                  "Both_Lost" = "Both Lost"))+
+  ggtitle("Fractionation Status By Gene")+
+  theme(title = element_text(size = 16,face = "bold"),
+        legend.title = element_text(size=14,face="bold"),
+        axis.title = element_text(face="bold"),
+        legend.text = element_text(size=12))
+ggsave("../Fractionation_Plots/fractionationStatus.ByGene.Cutoff.NoZn.jitterandline.png",
+       device = "png", dpi=300, width = 6, height = 4, units = "in")
+
+
+
 write_tsv(gene_fractionation, "/work/LAS/mhufford-lab/snodgras/Fractionation/intermediate-data-files/gene_fractionation.tsv")
 
 
